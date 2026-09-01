@@ -235,6 +235,73 @@ def cmd_desktop(args) -> int:
     return 0
 
 
+def cmd_organize(args) -> int:
+    from .agents import save_report
+    from .agents.curator import organize, to_markdown
+
+    store = _store(args)
+    collections = organize(store, prefer_llm=not args.no_llm)
+    if not collections:
+        print("La memoria está vacía; ingesta o sincroniza fuentes primero.")
+        return 0
+    report = to_markdown(collections, store)
+    path = save_report(_brain_dir(args), "colecciones", report)
+    for col in collections:
+        print(f"{col['name']:32} {len(col['doc_ids']):4} docs · {col['rationale']}")
+    print(f"\nInforme completo: {path}")
+    return 0
+
+
+def cmd_collections(args) -> int:
+    store = _store(args)
+    cols = store.list_collections()
+    if not cols:
+        print("Sin colecciones. Genera la agrupación con: sb agent organize")
+        return 0
+    for col in cols:
+        print(f"{col['name']:32} {len(col['doc_ids']):4} docs")
+    return 0
+
+
+def cmd_mail_triage(args) -> int:
+    from .agents import save_report
+    from .agents.mail_triage import PRIORITIES, to_markdown, triage
+    from .connectors.gmail import fetch_inbox, sender_name
+    from .connectors.google_auth import GoogleAuthError, list_accounts
+
+    accounts = [args.account] if args.account else list_accounts()
+    if not accounts:
+        print("Sin cuentas conectadas. Usa: sb google connect <alias>", file=sys.stderr)
+        return 1
+
+    emails = []
+    for alias in accounts:
+        try:
+            emails.extend(fetch_inbox(
+                alias, days=args.days, query=args.query,
+                include_bodies=args.bodies, limit=args.limit))
+        except GoogleAuthError as exc:
+            print(exc, file=sys.stderr)
+    if not emails:
+        print("No hay correos en el período consultado.")
+        return 0
+
+    store = _store(args)
+    triaged = triage(emails, store, prefer_llm=not args.no_llm)
+    report = to_markdown(triaged)
+    path = save_report(_brain_dir(args), "triaje-correo", report)
+
+    current = None
+    for mail in triaged:
+        if mail["priority"] != current:
+            current = mail["priority"]
+            print(f"\n{PRIORITIES[current]}")
+        print(f"  {sender_name(mail.get('from', '?')):28.28} {mail.get('subject', '')[:60]}")
+    print(f"\nInforme completo (local): {path}")
+    print("Tu bandeja no fue modificada (scope de solo lectura).")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
     if args.snapshot:
@@ -302,6 +369,27 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--path", help="ruta del escritorio si la detección falla")
     p.add_argument("--port", type=int, default=8765)
     p.set_defaults(func=cmd_desktop)
+
+    ag = sub.add_parser("agent", help="agentes: curador de archivos y triaje de correo")
+    asub = ag.add_subparsers(dest="agent_command", required=True)
+
+    ap = asub.add_parser("organize", help="agrupa todos los documentos en colecciones")
+    ap.add_argument("--no-llm", action="store_true", help="modo 100% local")
+    ap.set_defaults(func=cmd_organize)
+
+    ap = asub.add_parser("mail", help="prioriza tu bandeja de Gmail (solo lectura)")
+    ap.add_argument("--account", help="solo esta cuenta (default: todas)")
+    ap.add_argument("--days", type=int, default=7, help="ventana en días (default 7)")
+    ap.add_argument("--limit", type=int, default=50, help="máx. correos por cuenta")
+    ap.add_argument("--query", help="filtro Gmail, p. ej. 'from:falp.org'")
+    ap.add_argument("--bodies", action="store_true",
+                    help="incluir cuerpo completo (por defecto solo asunto+snippet)")
+    ap.add_argument("--no-llm", action="store_true",
+                    help="modo 100% local: nada sale de tu máquina")
+    ap.set_defaults(func=cmd_mail_triage)
+
+    p = sub.add_parser("collections", help="colecciones generadas por el curador")
+    p.set_defaults(func=cmd_collections)
 
     p = sub.add_parser("export", help="exporta la memoria a un snapshot JSON (para desplegar)")
     p.add_argument("output", nargs="?", default="data/snapshot.json")

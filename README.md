@@ -23,6 +23,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [07 · Conectores Google](docs/07-conectores-google.md) | Drive + Calendar multi-cuenta (OAuth readonly) |
 | [08 · Despliegue en Vercel](docs/08-despliegue-vercel.md) | vitrina pública en modo demo; el cerebro sigue local |
 | [09 · Fuentes locales y escritorio](docs/09-fuentes-locales.md) | carpetas como fuentes de solo lectura + acceso directo |
+| [10 · Agentes y privacidad](docs/10-agentes-y-privacidad.md) | curador de archivos + triaje de correo; modelo de privacidad |
 
 ## Quickstart
 
@@ -46,6 +47,16 @@ sb sources sync --no-llm    # primera sincronización (md, txt, csv; pdf/docx co
 
 El sistema solo LEE esas carpetas; jamás modifica su contenido. Detalles:
 [docs/09-fuentes-locales.md](docs/09-fuentes-locales.md).
+
+### Agentes (leen y recomiendan; nunca actúan)
+
+```bash
+sb agent organize           # agrupa todos tus documentos en colecciones
+sb agent mail               # prioriza tu bandeja de Gmail (solo lectura)
+sb agent mail --no-llm      # modo 100% local: nada sale de tu máquina
+```
+
+Modelo de privacidad completo: [docs/10-agentes-y-privacidad.md](docs/10-agentes-y-privacidad.md).
 
 ### Conectar tus cuentas Google (Drive + Calendar)
 

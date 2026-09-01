@@ -11,7 +11,9 @@ Cada `connect` abre el navegador para autorizar ESA cuenta; el refresh token
 queda guardado y las sincronizaciones siguientes no piden nada.
 
 Scopes de solo lectura: este sistema observa; jamás modifica tu Drive,
-Calendar o Gmail.
+Calendar o Gmail. Cuentas autorizadas antes de añadir Gmail deben
+re-autorizarse una vez (sb google connect <alias>) para otorgar el
+nuevo permiso de lectura.
 """
 
 from __future__ import annotations
@@ -22,6 +24,7 @@ from pathlib import Path
 SCOPES = [
     "https://www.googleapis.com/auth/drive.readonly",
     "https://www.googleapis.com/auth/calendar.readonly",
+    "https://www.googleapis.com/auth/gmail.readonly",
 ]
 
 DEFAULT_GOOGLE_DIR = Path(".brain/google")

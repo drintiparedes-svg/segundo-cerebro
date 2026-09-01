@@ -72,6 +72,19 @@ CREATE TABLE IF NOT EXISTS feedback (
     created_at TEXT NOT NULL
 );
 
+-- Agrupaciones del agente curador: colección → documentos.
+CREATE TABLE IF NOT EXISTS collections (
+    id TEXT PRIMARY KEY,
+    name TEXT NOT NULL,
+    rationale TEXT,
+    created_at TEXT NOT NULL
+);
+CREATE TABLE IF NOT EXISTS collection_docs (
+    collection_id TEXT NOT NULL REFERENCES collections(id) ON DELETE CASCADE,
+    doc_id TEXT NOT NULL REFERENCES documents(id),
+    UNIQUE(collection_id, doc_id)
+);
+
 CREATE VIRTUAL TABLE IF NOT EXISTS documents_fts USING fts5(
     id UNINDEXED, title, body
 );
@@ -121,6 +134,46 @@ class BrainStore:
             "SELECT * FROM documents WHERE id = ?", (doc_id,)
         ).fetchone()
         return self._row_to_document(row) if row else None
+
+    def list_documents(self, limit: int = 1000) -> list[Document]:
+        rows = self.conn.execute(
+            "SELECT * FROM documents ORDER BY date DESC LIMIT ?", (limit,)
+        ).fetchall()
+        return [self._row_to_document(r) for r in rows]
+
+    # ── colecciones (agente curador) ──────────────────────────────────────
+
+    def replace_collections(self, collections: list[dict]) -> None:
+        """Reemplaza la agrupación completa: [{id, name, rationale,
+        created_at, doc_ids}]. La curaduría es una vista recalculable,
+        no memoria acumulativa."""
+        self.conn.execute("DELETE FROM collection_docs")
+        self.conn.execute("DELETE FROM collections")
+        for col in collections:
+            self.conn.execute(
+                "INSERT INTO collections (id, name, rationale, created_at) "
+                "VALUES (?,?,?,?)",
+                (col["id"], col["name"], col.get("rationale"), col["created_at"]),
+            )
+            for doc_id in col.get("doc_ids", []):
+                self.conn.execute(
+                    "INSERT OR IGNORE INTO collection_docs (collection_id, doc_id) "
+                    "VALUES (?,?)", (col["id"], doc_id),
+                )
+        self.conn.commit()
+
+    def list_collections(self) -> list[dict]:
+        cols = []
+        for row in self.conn.execute(
+            "SELECT * FROM collections ORDER BY name"
+        ).fetchall():
+            doc_ids = [r["doc_id"] for r in self.conn.execute(
+                "SELECT doc_id FROM collection_docs WHERE collection_id = ?",
+                (row["id"],)).fetchall()]
+            cols.append({"id": row["id"], "name": row["name"],
+                         "rationale": row["rationale"],
+                         "created_at": row["created_at"], "doc_ids": doc_ids})
+        return cols
 
     # ── knowledge objects ─────────────────────────────────────────────────
 

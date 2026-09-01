@@ -5,8 +5,8 @@ fuentes de información. Garantía de diseño: este módulo abre los archivos
 exclusivamente en modo lectura; nunca crea, modifica ni borra nada dentro
 de una fuente. Todo lo que el sistema escribe vive en .brain/.
 
-Tipos soportados: .md, .txt, .csv siempre; .pdf y .docx si están
-instalados los extras (pip install -e ".[files]").
+Tipos soportados: .md, .txt, .csv, .html, .json siempre; .pdf, .docx,
+.xlsx y .pptx si están instalados los extras (pip install -e ".[files]").
 """
 
 from __future__ import annotations
@@ -17,8 +17,8 @@ from pathlib import Path
 
 from ..models import Document, new_id, now_iso
 
-TEXT_EXTS = {".md", ".txt", ".csv"}
-OPTIONAL_EXTS = {".pdf", ".docx"}
+TEXT_EXTS = {".md", ".txt", ".csv", ".json"}
+OPTIONAL_EXTS = {".pdf", ".docx", ".xlsx", ".pptx", ".html", ".htm"}
 SKIP_DIRS = {".git", ".brain", "node_modules", "__pycache__", ".venv",
              "$RECYCLE.BIN", "System Volume Information"}
 SKIP_FILES = {"desktop.ini", "Thumbs.db", ".DS_Store", ".localized"}
@@ -102,7 +102,72 @@ def read_file_text(path: Path) -> str | None:
             return "\n".join(p.text for p in d.paragraphs)
         except Exception:
             return None
+    if ext == ".xlsx":
+        try:
+            from openpyxl import load_workbook
+        except ImportError:
+            return None
+        try:
+            wb = load_workbook(str(path), read_only=True, data_only=True)
+            lines = []
+            for ws in wb.worksheets:
+                lines.append(f"## Hoja: {ws.title}")
+                for row in ws.iter_rows(max_rows=500, values_only=True):
+                    cells = [str(c) for c in row if c is not None]
+                    if cells:
+                        lines.append(" | ".join(cells))
+            wb.close()
+            return "\n".join(lines)
+        except Exception:
+            return None
+    if ext == ".pptx":
+        try:
+            from pptx import Presentation
+        except ImportError:
+            return None
+        try:
+            prs = Presentation(str(path))
+            lines = []
+            for i, slide in enumerate(prs.slides, 1):
+                lines.append(f"## Diapositiva {i}")
+                for shape in slide.shapes:
+                    if getattr(shape, "has_text_frame", False):
+                        lines.append(shape.text_frame.text)
+            return "\n".join(lines)
+        except Exception:
+            return None
+    if ext in {".html", ".htm"}:
+        return _html_to_text(path)
     return None
+
+
+def _html_to_text(path: Path) -> str | None:
+    from html.parser import HTMLParser
+
+    class Extractor(HTMLParser):
+        def __init__(self):
+            super().__init__()
+            self.chunks: list[str] = []
+            self._skip = 0
+
+        def handle_starttag(self, tag, attrs):
+            if tag in ("script", "style"):
+                self._skip += 1
+
+        def handle_endtag(self, tag):
+            if tag in ("script", "style") and self._skip:
+                self._skip -= 1
+
+        def handle_data(self, data):
+            if not self._skip and data.strip():
+                self.chunks.append(data.strip())
+
+    try:
+        parser = Extractor()
+        parser.feed(path.read_text(encoding="utf-8", errors="replace"))
+        return "\n".join(parser.chunks)
+    except Exception:
+        return None
 
 
 def file_to_document(path: Path, source_alias: str, body: str) -> Document:

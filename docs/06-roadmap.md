@@ -40,6 +40,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
 
 ## V4 — Agentic Second Brain
 
+- ✅ Primeros agentes de solo lectura: curador de archivos y triaje de
+  correo con cruce del knowledge graph ([docs/10](10-agentes-y-privacidad.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes
