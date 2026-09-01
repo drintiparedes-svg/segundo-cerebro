@@ -1,0 +1,19 @@
+# memoria estructurada local
+.brain/
+
+# python
+__pycache__/
+*.egg-info/
+.pytest_cache/
+dist/
+build/
+.venv/
+
+# vault: la memoria personal no se versiona; solo plantillas y ejemplos
+brain/**
+!brain/*/
+!brain/README.md
+!brain/templates/**
+!brain/self/identity.md
+!brain/inbox/2026-08-12-reunion-oncohematologia.md
+!brain/**/.gitkeep

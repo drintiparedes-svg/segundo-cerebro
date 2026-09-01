@@ -1,0 +1,26 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "segundo-cerebro"
+version = "0.1.0"
+description = "Personal Cognitive Operating System: memoria digital persistente + agentes"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+    "pyyaml>=6.0",
+]
+
+[project.optional-dependencies]
+llm = ["anthropic>=1.0"]
+dev = ["pytest>=8.0"]
+
+[project.scripts]
+sb = "segundo_cerebro.cli:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-data]
+"segundo_cerebro.ui" = ["*.html"]

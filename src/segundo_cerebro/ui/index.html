@@ -1,0 +1,639 @@
+<title>Segundo Cerebro</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600&family=Albert+Sans:wght@400;500;600&family=JetBrains+Mono:wght@400;500&display=swap">
+<style>
+  /* ── tokens: dark-first (observatorio de conocimiento) ─────────────── */
+  :root {
+    --bg: #0b0e14;
+    --bg-veil: #0b0e14cc;
+    --surface: #141926;
+    --surface-2: #1b2233;
+    --line: #252d40;
+    --ink: #e8eaf2;
+    --ink-dim: #9aa3b8;
+    --ink-faint: #5c6579;
+    --accent: #e0b458;
+    --accent-ink: #14100a;
+    --person: #e0b458;
+    --project: #4fc8b4;
+    --organization: #8e7cd8;
+    --concept: #d0708f;
+    --edge: #2c3550;
+    --glow: #e0b45833;
+  }
+  @media (prefers-color-scheme: light) {
+    :root:not([data-theme="dark"]) {
+      --bg: #f2f4f7;
+      --bg-veil: #f2f4f7cc;
+      --surface: #ffffff;
+      --surface-2: #e9edf3;
+      --line: #d7dde8;
+      --ink: #1a2233;
+      --ink-dim: #4d5a72;
+      --ink-faint: #8b96ab;
+      --accent: #a97c1d;
+      --accent-ink: #fffaf0;
+      --person: #a97c1d;
+      --project: #157f6d;
+      --organization: #5b4aa8;
+      --concept: #a83c62;
+      --edge: #c4cddc;
+      --glow: #a97c1d22;
+    }
+  }
+  :root[data-theme="light"] {
+    --bg: #f2f4f7;
+    --bg-veil: #f2f4f7cc;
+    --surface: #ffffff;
+    --surface-2: #e9edf3;
+    --line: #d7dde8;
+    --ink: #1a2233;
+    --ink-dim: #4d5a72;
+    --ink-faint: #8b96ab;
+    --accent: #a97c1d;
+    --accent-ink: #fffaf0;
+    --person: #a97c1d;
+    --project: #157f6d;
+    --organization: #5b4aa8;
+    --concept: #a83c62;
+    --edge: #c4cddc;
+    --glow: #a97c1d22;
+  }
+
+  * { box-sizing: border-box; }
+  html, body { height: 100%; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.55 "Albert Sans", system-ui, -apple-system, sans-serif;
+    overflow: hidden;
+  }
+
+  /* ── barra superior ────────────────────────────────────────────────── */
+  header {
+    position: fixed; inset: 0 0 auto 0; z-index: 30;
+    display: flex; align-items: center; gap: 1.25rem;
+    padding: .8rem 1.4rem;
+    background: var(--bg-veil);
+    backdrop-filter: blur(10px);
+    border-bottom: 1px solid var(--line);
+  }
+  .wordmark {
+    font-family: "Fraunces", Georgia, serif;
+    font-size: 1.25rem; font-weight: 600; letter-spacing: .01em;
+    white-space: nowrap;
+  }
+  .wordmark em { font-style: normal; color: var(--accent); }
+  .tagline {
+    font-family: "JetBrains Mono", monospace;
+    font-size: .68rem; letter-spacing: .14em; text-transform: uppercase;
+    color: var(--ink-faint); white-space: nowrap;
+  }
+  #search {
+    flex: 1; max-width: 30rem; margin-left: auto;
+    background: var(--surface); color: var(--ink);
+    border: 1px solid var(--line); border-radius: 999px;
+    padding: .5rem 1.1rem; font: inherit; font-size: .88rem;
+    outline: none; transition: border-color .18s;
+  }
+  #search:focus { border-color: var(--accent); }
+  #search::placeholder { color: var(--ink-faint); }
+
+  /* ── grafo ─────────────────────────────────────────────────────────── */
+  #graph { position: fixed; inset: 0; cursor: grab; }
+  #graph.dragging { cursor: grabbing; }
+
+  .legend {
+    position: fixed; left: 1.4rem; bottom: 1.2rem; z-index: 20;
+    display: flex; flex-direction: column; gap: .35rem;
+    font-size: .78rem; color: var(--ink-dim);
+  }
+  .legend span { display: flex; align-items: center; gap: .5rem; }
+  .legend i {
+    width: .62rem; height: .62rem; border-radius: 50%; display: inline-block;
+  }
+
+  /* ── panel derecho ─────────────────────────────────────────────────── */
+  aside {
+    position: fixed; top: 3.6rem; right: 0; bottom: 0; z-index: 25;
+    width: min(26rem, 92vw);
+    display: flex; flex-direction: column;
+    background: var(--surface);
+    border-left: 1px solid var(--line);
+    transform: translateX(100%);
+    transition: transform .28s cubic-bezier(.4,0,.2,1);
+  }
+  aside.open { transform: none; }
+  @media (prefers-reduced-motion: reduce) {
+    aside { transition: none; }
+  }
+
+  nav {
+    display: flex; border-bottom: 1px solid var(--line);
+  }
+  nav button {
+    flex: 1; padding: .7rem .2rem;
+    background: none; border: 0; border-bottom: 2px solid transparent;
+    color: var(--ink-dim); font: inherit; font-size: .8rem; cursor: pointer;
+  }
+  nav button:hover { color: var(--ink); }
+  nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
+  nav button.active { color: var(--ink); border-bottom-color: var(--accent); }
+
+  #panel-body { flex: 1; overflow-y: auto; padding: 1.1rem 1.3rem; }
+
+  .ko {
+    padding: .75rem 0; border-bottom: 1px solid var(--line);
+  }
+  .ko:last-child { border-bottom: 0; }
+  .ko .meta {
+    display: flex; gap: .6rem; align-items: baseline;
+    font-family: "JetBrains Mono", monospace; font-size: .68rem;
+    color: var(--ink-faint); margin-bottom: .2rem;
+    font-variant-numeric: tabular-nums;
+  }
+  .chip {
+    padding: .05rem .5rem; border-radius: 999px;
+    border: 1px solid var(--line); color: var(--ink-dim);
+    text-transform: uppercase; letter-spacing: .08em; font-size: .62rem;
+  }
+  .chip.decision { color: var(--person); border-color: var(--person); }
+  .chip.task { color: var(--project); border-color: var(--project); }
+  .chip.event { color: var(--organization); border-color: var(--organization); }
+  .chip.question { color: var(--concept); border-color: var(--concept); }
+  .ko p { margin: .15rem 0 0; font-size: .88rem; }
+  .ko .who { color: var(--ink-dim); font-size: .78rem; margin-top: .15rem; }
+
+  h2 {
+    font-family: "Fraunces", Georgia, serif; font-weight: 600;
+    font-size: 1.15rem; margin: .2rem 0 .6rem; text-wrap: balance;
+  }
+  .empty { color: var(--ink-faint); font-size: .85rem; padding: 1rem 0; }
+
+  /* detalle de nodo */
+  .node-type {
+    font-family: "JetBrains Mono", monospace; font-size: .66rem;
+    letter-spacing: .14em; text-transform: uppercase; color: var(--ink-faint);
+  }
+  .rel-line {
+    display: flex; gap: .5rem; align-items: baseline;
+    padding: .4rem 0; border-bottom: 1px solid var(--line);
+    font-size: .85rem;
+  }
+  .rel-line .rt {
+    font-family: "JetBrains Mono", monospace; font-size: .68rem;
+    color: var(--accent);
+  }
+  .rel-line .window {
+    margin-left: auto; font-family: "JetBrains Mono", monospace;
+    font-size: .65rem; color: var(--ink-faint);
+    font-variant-numeric: tabular-nums;
+  }
+
+  /* preguntar */
+  #ask-form { display: flex; gap: .5rem; margin-bottom: .9rem; }
+  #ask-input {
+    flex: 1; background: var(--surface-2); color: var(--ink);
+    border: 1px solid var(--line); border-radius: .55rem;
+    padding: .55rem .8rem; font: inherit; font-size: .85rem; outline: none;
+  }
+  #ask-input:focus { border-color: var(--accent); }
+  #ask-form button {
+    background: var(--accent); color: var(--accent-ink);
+    border: 0; border-radius: .55rem; padding: .55rem .95rem;
+    font: inherit; font-size: .82rem; font-weight: 600; cursor: pointer;
+  }
+  #ask-form button:focus-visible { outline: 2px solid var(--ink); }
+  #ask-result {
+    white-space: pre-wrap; font-size: .82rem; color: var(--ink-dim);
+    font-family: "JetBrains Mono", monospace; line-height: 1.6;
+  }
+
+  .demo-note {
+    position: fixed; left: 50%; transform: translateX(-50%);
+    bottom: 1.2rem; z-index: 20;
+    font-family: "JetBrains Mono", monospace; font-size: .66rem;
+    letter-spacing: .1em; text-transform: uppercase;
+    color: var(--ink-faint);
+    background: var(--bg-veil); border: 1px solid var(--line);
+    border-radius: 999px; padding: .3rem .9rem;
+  }
+</style>
+
+<header>
+  <div class="wordmark">Segundo <em>Cerebro</em></div>
+  <div class="tagline">personal cognitive os</div>
+  <input id="search" type="search" placeholder="Buscar en la memoria…" autocomplete="off">
+</header>
+
+<canvas id="graph" aria-label="Grafo de conocimiento"></canvas>
+
+<div class="legend" aria-hidden="true">
+  <span><i style="background:var(--person)"></i>Personas</span>
+  <span><i style="background:var(--project)"></i>Proyectos</span>
+  <span><i style="background:var(--organization)"></i>Organizaciones</span>
+  <span><i style="background:var(--concept)"></i>Conceptos</span>
+</div>
+
+<aside id="panel" class="open">
+  <nav>
+    <button data-tab="decisions" class="active">Decisiones</button>
+    <button data-tab="tasks">Compromisos</button>
+    <button data-tab="timeline">Timeline</button>
+    <button data-tab="ask">Preguntar</button>
+  </nav>
+  <div id="panel-body"></div>
+</aside>
+
+<div id="demo-note" class="demo-note" hidden>modo demo · datos de ejemplo</div>
+
+<script>
+"use strict";
+
+/* ── datos de demostración (cuando la API no está disponible) ─────────── */
+const DEMO = {
+  graph: {
+    nodes: [
+      { id: "inti", name: "Inti", type: "person", degree: 6 },
+      { id: "ricardo", name: "Ricardo", type: "person", degree: 3 },
+      { id: "raimundo", name: "Raimundo", type: "person", degree: 1 },
+      { id: "falp", name: "FALP", type: "organization", degree: 3 },
+      { id: "imperial", name: "Imperial College", type: "organization", degree: 2 },
+      { id: "medismart", name: "Medismart", type: "organization", degree: 1 },
+      { id: "oncodata", name: "ONCODATA", type: "project", degree: 3 },
+      { id: "rhc", name: "RHC", type: "project", degree: 2 },
+      { id: "oncohem", name: "Oncohematology DB", type: "project", degree: 3 },
+      { id: "thesis", name: "MSc Thesis", type: "project", degree: 3 },
+      { id: "trust", name: "Trust", type: "concept", degree: 1 },
+      { id: "calibration", name: "Calibration", type: "concept", degree: 1 },
+      { id: "hai", name: "Human–AI Collaboration", type: "concept", degree: 3 },
+      { id: "hpv", name: "HPV self-sampling", type: "concept", degree: 1 },
+    ],
+    links: [
+      { source: "inti", target: "falp", type: "leads_informatics", valid_from: "2025-03-01" },
+      { source: "inti", target: "oncodata", type: "develops", valid_from: "2025-10-01" },
+      { source: "inti", target: "rhc", type: "develops", valid_from: "2025-06-01" },
+      { source: "inti", target: "ricardo", type: "collaborates", valid_from: "2025-04-01" },
+      { source: "inti", target: "imperial", type: "studies", valid_from: "2024-10-01" },
+      { source: "inti", target: "medismart", type: "advises", valid_from: "2025-01-01" },
+      { source: "ricardo", target: "falp", type: "manages", valid_from: "2024-01-01" },
+      { source: "ricardo", target: "oncohem", type: "sponsors", valid_from: "2026-08-12" },
+      { source: "raimundo", target: "oncohem", type: "participates_in", valid_from: "2026-08-12" },
+      { source: "oncodata", target: "falp", type: "belongs_to", valid_from: "2025-10-01" },
+      { source: "oncohem", target: "oncodata", type: "extends", valid_from: "2026-08-12" },
+      { source: "thesis", target: "imperial", type: "submitted_to", valid_from: "2026-01-01" },
+      { source: "thesis", target: "hai", type: "investigates", valid_from: "2026-01-01" },
+      { source: "hai", target: "trust", type: "concept", valid_from: "2026-01-01" },
+      { source: "hai", target: "calibration", type: "concept", valid_from: "2026-01-01" },
+      { source: "thesis", target: "hpv", type: "case_study", valid_from: "2026-02-01" },
+      { source: "rhc", target: "falp", type: "belongs_to", valid_from: "2025-06-01" },
+    ],
+  },
+  kos: [
+    { ko_type: "decision", date: "2026-08-12", statement: "Avanzar con una base de datos validada para cánceres oncohematológicos.", people: ["Inti", "Ricardo", "Raimundo"], status: "active", title: "Modelo de captura oncohematológica" },
+    { ko_type: "decision", date: "2026-07-30", statement: "El RHC usará extracción estructurada con revisión humana antes de carga.", people: ["Inti"], status: "active", title: "Pipeline RHC" },
+    { ko_type: "task", date: "2026-08-12", statement: "Preparar propuesta de variables mínimas para la base oncohematológica.", people: ["Inti"], status: "active", title: "Variables mínimas" },
+    { ko_type: "task", date: "2026-08-20", statement: "Enviar borrador de metodología de tesis a supervisión.", people: ["Inti"], status: "active", title: "Metodología tesis" },
+    { ko_type: "event", date: "2026-08-12", statement: "Reunión con Ricardo: aprobación de la base oncohematológica.", people: ["Inti", "Ricardo"], status: "active", title: "Reunión FALP · gestión clínica" },
+    { ko_type: "event", date: "2026-08-28", statement: "Sesión de avance ONCODATA con equipo de datos.", people: ["Inti"], status: "active", title: "Avance ONCODATA" },
+    { ko_type: "question", date: "2026-08-12", statement: "¿Qué estándar de interoperabilidad usará la base oncohematológica?", people: [], status: "active", title: "Estándar pendiente" },
+  ],
+};
+
+/* ── estado ───────────────────────────────────────────────────────────── */
+let demoMode = false;
+let graph = { nodes: [], links: [] };
+let kos = [];
+let selected = null;
+let hovered = null;
+
+const api = async (path) => {
+  const res = await fetch(path);
+  if (!res.ok) throw new Error(res.status);
+  return res.json();
+};
+
+async function loadData() {
+  try {
+    graph = await api("/api/graph");
+    kos = await api("/api/kos");
+    if (!graph.nodes.length) throw new Error("empty");
+  } catch {
+    demoMode = true;
+    graph = DEMO.graph;
+    kos = DEMO.kos;
+    document.getElementById("demo-note").hidden = false;
+  }
+  initSim();
+  renderTab();
+}
+
+/* ── simulación force-directed (canvas, sin dependencias) ─────────────── */
+const canvas = document.getElementById("graph");
+const ctx = canvas.getContext("2d");
+let W = 0, H = 0, DPR = 1;
+let view = { x: 0, y: 0, k: 1 };
+let nodes = [], links = [];
+
+function resize() {
+  DPR = window.devicePixelRatio || 1;
+  W = window.innerWidth; H = window.innerHeight;
+  canvas.width = W * DPR; canvas.height = H * DPR;
+  canvas.style.width = W + "px"; canvas.style.height = H + "px";
+}
+window.addEventListener("resize", resize);
+resize();
+
+function initSim() {
+  const cx = W * 0.38, cy = H * 0.52;
+  const byId = {};
+  nodes = graph.nodes.map((n, i) => {
+    const angle = (i / graph.nodes.length) * Math.PI * 2;
+    const node = {
+      ...n,
+      x: cx + Math.cos(angle) * 160 + (Math.random() - 0.5) * 60,
+      y: cy + Math.sin(angle) * 160 + (Math.random() - 0.5) * 60,
+      vx: 0, vy: 0,
+      r: 6 + Math.min(10, (n.degree || 0) * 1.6),
+    };
+    byId[n.id] = node;
+    return node;
+  });
+  links = graph.links
+    .map(l => ({ ...l, a: byId[l.source], b: byId[l.target] }))
+    .filter(l => l.a && l.b);
+}
+
+let alpha = 1;
+function tick() {
+  alpha = Math.max(0.02, alpha * 0.995);
+  // repulsión
+  for (let i = 0; i < nodes.length; i++) {
+    for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j];
+      let dx = b.x - a.x, dy = b.y - a.y;
+      let d2 = dx * dx + dy * dy || 1;
+      if (d2 > 250000) continue;
+      const f = 2600 / d2 * alpha;
+      const d = Math.sqrt(d2);
+      dx /= d; dy /= d;
+      a.vx -= dx * f; a.vy -= dy * f;
+      b.vx += dx * f; b.vy += dy * f;
+    }
+  }
+  // resortes
+  for (const l of links) {
+    let dx = l.b.x - l.a.x, dy = l.b.y - l.a.y;
+    const d = Math.sqrt(dx * dx + dy * dy) || 1;
+    const f = (d - 110) * 0.015 * alpha * 4;
+    dx /= d; dy /= d;
+    l.a.vx += dx * f; l.a.vy += dy * f;
+    l.b.vx -= dx * f; l.b.vy -= dy * f;
+  }
+  // gravedad suave hacia el centro del área visible del grafo
+  const cx = W * 0.38, cy = H * 0.52;
+  for (const n of nodes) {
+    n.vx += (cx - n.x) * 0.0012 * alpha * 4;
+    n.vy += (cy - n.y) * 0.0012 * alpha * 4;
+    if (n !== dragNode) {
+      n.x += n.vx; n.y += n.vy;
+    }
+    n.vx *= 0.86; n.vy *= 0.86;
+  }
+}
+
+const css = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
+
+function draw() {
+  tick();
+  ctx.setTransform(DPR, 0, 0, DPR, 0, 0);
+  ctx.clearRect(0, 0, W, H);
+  ctx.translate(view.x, view.y);
+  ctx.scale(view.k, view.k);
+
+  const colors = {
+    person: css("--person"), project: css("--project"),
+    organization: css("--organization"), concept: css("--concept"),
+  };
+  const edgeColor = css("--edge");
+  const inkDim = css("--ink-dim");
+  const ink = css("--ink");
+  const bg = css("--bg");
+
+  const focus = hovered || selected;
+  const neighborhood = new Set();
+  if (focus) {
+    neighborhood.add(focus.id);
+    for (const l of links) {
+      if (l.a.id === focus.id) neighborhood.add(l.b.id);
+      if (l.b.id === focus.id) neighborhood.add(l.a.id);
+    }
+  }
+
+  // aristas
+  for (const l of links) {
+    const active = focus && (l.a.id === focus.id || l.b.id === focus.id);
+    ctx.strokeStyle = active ? css("--accent") : edgeColor;
+    ctx.globalAlpha = focus ? (active ? 0.9 : 0.12) : 0.55;
+    ctx.lineWidth = active ? 1.4 : 1;
+    ctx.beginPath();
+    ctx.moveTo(l.a.x, l.a.y);
+    ctx.lineTo(l.b.x, l.b.y);
+    ctx.stroke();
+    if (active && view.k > 0.7) {
+      const mx = (l.a.x + l.b.x) / 2, my = (l.a.y + l.b.y) / 2;
+      ctx.globalAlpha = 0.95;
+      ctx.fillStyle = inkDim;
+      ctx.font = "9px 'JetBrains Mono', monospace";
+      ctx.textAlign = "center";
+      ctx.fillText(l.type, mx, my - 4);
+    }
+  }
+
+  // nodos
+  for (const n of nodes) {
+    const color = colors[n.type] || inkDim;
+    const dimmed = focus && !neighborhood.has(n.id);
+    ctx.globalAlpha = dimmed ? 0.18 : 1;
+
+    if (focus && n.id === focus.id) {
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r + 9, 0, Math.PI * 2);
+      ctx.fillStyle = css("--glow");
+      ctx.fill();
+    }
+    ctx.beginPath();
+    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.lineWidth = 1.5;
+    ctx.strokeStyle = bg;
+    ctx.stroke();
+
+    ctx.fillStyle = dimmed ? inkDim : ink;
+    ctx.font = (n.id === (focus && focus.id) ? "600 " : "") + "11.5px 'Albert Sans', sans-serif";
+    ctx.textAlign = "center";
+    ctx.fillText(n.name, n.x, n.y + n.r + 14);
+  }
+  ctx.globalAlpha = 1;
+  requestAnimationFrame(draw);
+}
+requestAnimationFrame(draw);
+
+/* ── interacción: hover, drag, pan, zoom ──────────────────────────────── */
+let dragNode = null, panning = false, last = null;
+
+const toWorld = (px, py) => ({ x: (px - view.x) / view.k, y: (py - view.y) / view.k });
+
+function nodeAt(px, py) {
+  const p = toWorld(px, py);
+  for (let i = nodes.length - 1; i >= 0; i--) {
+    const n = nodes[i];
+    const dx = p.x - n.x, dy = p.y - n.y;
+    if (dx * dx + dy * dy < (n.r + 6) * (n.r + 6)) return n;
+  }
+  return null;
+}
+
+canvas.addEventListener("pointerdown", (e) => {
+  const n = nodeAt(e.clientX, e.clientY);
+  if (n) { dragNode = n; alpha = Math.max(alpha, 0.3); }
+  else { panning = true; canvas.classList.add("dragging"); }
+  last = { x: e.clientX, y: e.clientY };
+  canvas.setPointerCapture(e.pointerId);
+});
+canvas.addEventListener("pointermove", (e) => {
+  if (dragNode) {
+    const p = toWorld(e.clientX, e.clientY);
+    dragNode.x = p.x; dragNode.y = p.y;
+    alpha = Math.max(alpha, 0.25);
+  } else if (panning && last) {
+    view.x += e.clientX - last.x;
+    view.y += e.clientY - last.y;
+    last = { x: e.clientX, y: e.clientY };
+  } else {
+    hovered = nodeAt(e.clientX, e.clientY);
+    canvas.style.cursor = hovered ? "pointer" : "grab";
+  }
+});
+canvas.addEventListener("pointerup", (e) => {
+  if (dragNode && last && Math.hypot(e.clientX - last.x, e.clientY - last.y) < 4) {
+    selectNode(dragNode);
+  }
+  dragNode = null; panning = false; last = null;
+  canvas.classList.remove("dragging");
+});
+canvas.addEventListener("wheel", (e) => {
+  e.preventDefault();
+  const factor = e.deltaY < 0 ? 1.1 : 0.9;
+  const k = Math.min(3, Math.max(0.35, view.k * factor));
+  const p = toWorld(e.clientX, e.clientY);
+  view.x = e.clientX - p.x * k;
+  view.y = e.clientY - p.y * k;
+  view.k = k;
+}, { passive: false });
+
+/* ── panel ────────────────────────────────────────────────────────────── */
+const panelBody = document.getElementById("panel-body");
+let tab = "decisions";
+
+document.querySelectorAll("nav button").forEach(btn => {
+  btn.addEventListener("click", () => {
+    tab = btn.dataset.tab;
+    selected = null;
+    document.querySelectorAll("nav button").forEach(b => b.classList.toggle("active", b === btn));
+    renderTab();
+  });
+});
+
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function koCard(ko) {
+  const who = (ko.people || []).length ? `<div class="who">${esc(ko.people.join(" · "))}</div>` : "";
+  return `<div class="ko">
+    <div class="meta"><span class="chip ${esc(ko.ko_type)}">${esc(ko.ko_type)}</span><span>${esc(ko.date)}</span></div>
+    <p>${esc(ko.statement)}</p>${who}
+  </div>`;
+}
+
+function renderTab() {
+  if (selected) return renderNode(selected);
+  if (tab === "ask") {
+    panelBody.innerHTML = `
+      <h2>Preguntar a la memoria</h2>
+      <form id="ask-form">
+        <input id="ask-input" placeholder="¿Qué debería discutir con…?" autocomplete="off">
+        <button type="submit">Ir</button>
+      </form>
+      <div id="ask-result" class="empty">El router clasifica la pregunta y construye un context pack desde las memorias episódica, decisional, de compromisos y el grafo.</div>`;
+    document.getElementById("ask-form").addEventListener("submit", onAsk);
+    return;
+  }
+  const byTab = {
+    decisions: kos.filter(k => k.ko_type === "decision"),
+    tasks: kos.filter(k => k.ko_type === "task" && k.status === "active"),
+    timeline: kos.filter(k => k.ko_type === "event").sort((a, b) => b.date.localeCompare(a.date)),
+  };
+  const titles = { decisions: "Registro de decisiones", tasks: "Compromisos abiertos", timeline: "Memoria episódica" };
+  const items = byTab[tab] || [];
+  panelBody.innerHTML = `<h2>${titles[tab]}</h2>` +
+    (items.length ? items.map(koCard).join("") :
+      `<div class="empty">Aún no hay registros. Ingesta notas con <code>sb ingest brain/</code>.</div>`);
+}
+
+function selectNode(n) {
+  selected = n;
+  document.getElementById("panel").classList.add("open");
+  renderNode(n);
+}
+
+function renderNode(n) {
+  const rels = links.filter(l => l.a.id === n.id || l.b.id === n.id);
+  const relHtml = rels.map(l => {
+    const other = l.a.id === n.id ? l.b : l.a;
+    const win = `${l.valid_from || "?"} → ${l.valid_to || "vigente"}`;
+    return `<div class="rel-line"><span class="rt">${esc(l.type)}</span><span>${esc(other.name)}</span><span class="window">${esc(win)}</span></div>`;
+  }).join("");
+  const related = kos.filter(k => (k.people || []).includes(n.name) ||
+    k.project === n.name || (k.statement || "").includes(n.name));
+  panelBody.innerHTML = `
+    <div class="node-type">${esc(n.type)}</div>
+    <h2>${esc(n.name)}</h2>
+    ${relHtml || '<div class="empty">Sin relaciones registradas.</div>'}
+    ${related.length ? "<h2 style='margin-top:1.1rem'>Memoria asociada</h2>" + related.map(koCard).join("") : ""}`;
+}
+
+/* ── preguntar / buscar ───────────────────────────────────────────────── */
+async function onAsk(e) {
+  e.preventDefault();
+  const q = document.getElementById("ask-input").value.trim();
+  if (!q) return;
+  const out = document.getElementById("ask-result");
+  out.classList.remove("empty");
+  out.textContent = "Construyendo context pack…";
+  if (demoMode) {
+    out.textContent = "Modo demo: conecta el backend (sb serve) para consultar tu memoria real.";
+    return;
+  }
+  try {
+    const res = await api("/api/context?q=" + encodeURIComponent(q));
+    out.textContent = res.markdown;
+  } catch (err) {
+    out.textContent = "Error consultando la memoria: " + err.message;
+  }
+}
+
+let searchTimer = null;
+document.getElementById("search").addEventListener("input", (e) => {
+  clearTimeout(searchTimer);
+  const q = e.target.value.trim().toLowerCase();
+  searchTimer = setTimeout(() => {
+    if (!q) { hovered = null; return; }
+    hovered = nodes.find(n => n.name.toLowerCase().includes(q)) || null;
+    if (hovered) selectNode(hovered);
+  }, 250);
+});
+
+loadData();
+</script>
