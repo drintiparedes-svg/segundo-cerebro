@@ -1,5 +1,12 @@
-# memoria estructurada local
+# memoria estructurada local: nunca sale de esta máquina
 .brain/
+data/snapshot.json
+*.snapshot.json
+
+# sitio estático generado (se reconstruye en cada deploy)
+web/
+node_modules/
+.vercel/
 
 # python
 __pycache__/

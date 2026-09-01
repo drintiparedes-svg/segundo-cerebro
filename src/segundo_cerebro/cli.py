@@ -91,6 +91,15 @@ def cmd_timeline(args) -> int:
     return 0
 
 
+def cmd_export(args) -> int:
+    from .snapshot import write_snapshot
+    data = write_snapshot(_store(args), args.output, include_bodies=not args.no_bodies)
+    print(f"Snapshot: {args.output}")
+    print(f"Entidades: {len(data['nodes'])} · relaciones: {len(data['links'])} · "
+          f"KOs: {len(data['kos'])} · documentos: {len(data['documents'])}")
+    return 0
+
+
 def cmd_google_connect(args) -> int:
     from .connectors.google_auth import GoogleAuthError, get_credentials
     try:
@@ -140,7 +149,12 @@ def cmd_google_sync(args) -> int:
 
 def cmd_serve(args) -> int:
     from .server import serve
-    serve(BrainStore(args.db), host=args.host, port=args.port)
+    if args.snapshot:
+        from .snapshot import SnapshotStore
+        store = SnapshotStore.from_file(args.snapshot)
+    else:
+        store = BrainStore(args.db)
+    serve(store, host=args.host, port=args.port)
     return 0
 
 
@@ -177,6 +191,12 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("timeline", help="memoria episódica (eventos)")
     p.set_defaults(func=cmd_timeline)
 
+    p = sub.add_parser("export", help="exporta la memoria a un snapshot JSON (para desplegar)")
+    p.add_argument("output", nargs="?", default="data/snapshot.json")
+    p.add_argument("--no-bodies", action="store_true",
+                   help="omite el texto completo de los documentos")
+    p.set_defaults(func=cmd_export)
+
     g = sub.add_parser("google", help="conectores Google (Drive + Calendar, multi-cuenta)")
     gsub = g.add_subparsers(dest="google_command", required=True)
 
@@ -200,6 +220,7 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("serve", help="UI web con el grafo de conocimiento")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8765)
+    p.add_argument("--snapshot", help="servir un snapshot de solo lectura en vez de la base")
     p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)

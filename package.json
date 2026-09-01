@@ -1,0 +1,10 @@
+{
+  "name": "segundo-cerebro-web",
+  "private": true,
+  "version": "0.1.0",
+  "description": "Vitrina estática (modo demo) del Segundo Cerebro. El sistema real corre localmente.",
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build-web.mjs"
+  }
+}

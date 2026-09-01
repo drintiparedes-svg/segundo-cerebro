@@ -21,6 +21,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [05 · Flujo de agentes](docs/05-flujo-de-agentes.md) | orquestador, approval gate, learning loop |
 | [06 · Roadmap](docs/06-roadmap.md) | V1 Memory OS → V4 Agentic Second Brain |
 | [07 · Conectores Google](docs/07-conectores-google.md) | Drive + Calendar multi-cuenta (OAuth readonly) |
+| [08 · Despliegue en Vercel](docs/08-despliegue-vercel.md) | vitrina pública en modo demo; el cerebro sigue local |
 
 ## Quickstart
 
@@ -67,6 +68,21 @@ escritura y frontmatter: [`brain/README.md`](brain/README.md).
 `sb serve` levanta el frontend: un grafo de conocimiento force-directed
 (canvas, sin dependencias) con paneles de decisiones, compromisos, timeline
 y consulta a la memoria. Sin datos propios aún, carga un modo demo.
+
+```bash
+sb serve                                # UI sobre tu memoria viva
+sb export && sb serve --snapshot data/snapshot.json   # sobre una copia congelada
+```
+
+## Dónde corre cada cosa
+
+El sistema **corre solo en tu máquina**: ingesta, memoria, conectores de
+Google y consultas son locales. Lo único publicable es la vitrina — la misma
+interfaz en modo demo, sin ningún dato personal:
+
+```bash
+vercel --prod    # publica web/ (modo demo); ver docs/08-despliegue-vercel.md
+```
 
 ## Tests
 
