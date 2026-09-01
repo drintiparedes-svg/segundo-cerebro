@@ -17,8 +17,10 @@ sobre ≥1 mes de notas reales.
 
 ## V2 — Cognitive Memory
 
+- ✅ Conectores Google Drive + Calendar multi-cuenta
+  ([docs/07](07-conectores-google.md))
 - PostgreSQL + pgvector (búsqueda híbrida BM25 + vectorial)
-- Conectores: Google Drive, Gmail, Calendar, transcripciones de reuniones
+- Conectores restantes: Gmail (con filtros), transcripciones de reuniones
 - Perfil de identidad estructurado en el context pack
 - Registro de feedback operativo (learning loop real)
 - Store cifrado para información sensible; OAuth mínimo privilegio

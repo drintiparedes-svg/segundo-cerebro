@@ -69,12 +69,45 @@ def _infer_type(path: Path) -> str:
     return "note"
 
 
+def process_document(store: BrainStore, doc: Document, extractor,
+                     summary: dict) -> None:
+    """Corre la capa cognitiva sobre un documento YA insertado: extracción
+    de KOs, deduplicación de entidades y relaciones. Compartido entre el
+    vault y los conectores externos."""
+    result = extractor.extract(doc)
+
+    # Deduplicar entidades contra la memoria y reconstruir referencias.
+    id_map: dict[str, str] = {}
+    for ent in result.entities:
+        stored = store.upsert_entity(ent)
+        id_map[ent.id] = stored.id
+        summary["entities"] += 1
+
+    for ko in result.knowledge_objects:
+        store.add_knowledge_object(ko)
+        summary["knowledge_objects"] += 1
+
+    for rel in result.relationships:
+        rel.source_id = id_map.get(rel.source_id, rel.source_id)
+        rel.target_id = id_map.get(rel.target_id, rel.target_id)
+        store.add_relationship(rel)
+        summary["relationships"] += 1
+
+    # Relaciones implícitas de metadatos: personas ↔ proyecto.
+    _link_frontmatter(store, doc)
+
+
+def new_summary(extractor) -> dict:
+    return {"documents": 0, "skipped": 0, "knowledge_objects": 0,
+            "entities": 0, "relationships": 0,
+            "extractor": type(extractor).__name__}
+
+
 def ingest_path(store: BrainStore, target: Path, prefer_llm: bool = True) -> dict:
     """Ingesta un archivo o directorio de Markdown. Devuelve un resumen."""
     files = sorted(target.rglob("*.md")) if target.is_dir() else [target]
     extractor = get_extractor(prefer_llm=prefer_llm)
-    summary = {"documents": 0, "skipped": 0, "knowledge_objects": 0,
-               "entities": 0, "relationships": 0, "extractor": type(extractor).__name__}
+    summary = new_summary(extractor)
 
     for f in files:
         if f.name.startswith(("_", ".")) or f.name == "README.md" or "templates" in f.parts:
@@ -84,28 +117,7 @@ def ingest_path(store: BrainStore, target: Path, prefer_llm: bool = True) -> dic
             summary["skipped"] += 1
             continue
         summary["documents"] += 1
-
-        result = extractor.extract(doc)
-
-        # Deduplicar entidades contra la memoria y reconstruir referencias.
-        id_map: dict[str, str] = {}
-        for ent in result.entities:
-            stored = store.upsert_entity(ent)
-            id_map[ent.id] = stored.id
-            summary["entities"] += 1
-
-        for ko in result.knowledge_objects:
-            store.add_knowledge_object(ko)
-            summary["knowledge_objects"] += 1
-
-        for rel in result.relationships:
-            rel.source_id = id_map.get(rel.source_id, rel.source_id)
-            rel.target_id = id_map.get(rel.target_id, rel.target_id)
-            store.add_relationship(rel)
-            summary["relationships"] += 1
-
-        # Relaciones implícitas del frontmatter: personas ↔ proyecto.
-        _link_frontmatter(store, doc)
+        process_document(store, doc, extractor, summary)
 
     return summary
 

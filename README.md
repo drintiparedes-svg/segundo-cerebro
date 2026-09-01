@@ -20,6 +20,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [04 · Estructura de memoria](docs/04-estructura-de-memoria.md) | seis memorias + memory router + context engine |
 | [05 · Flujo de agentes](docs/05-flujo-de-agentes.md) | orquestador, approval gate, learning loop |
 | [06 · Roadmap](docs/06-roadmap.md) | V1 Memory OS → V4 Agentic Second Brain |
+| [07 · Conectores Google](docs/07-conectores-google.md) | Drive + Calendar multi-cuenta (OAuth readonly) |
 
 ## Quickstart
 
@@ -33,6 +34,18 @@ sb decisions                # decision ledger
 sb timeline                 # memoria episódica
 sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:8765
 ```
+
+### Conectar tus cuentas Google (Drive + Calendar)
+
+```bash
+pip install -e ".[google]"
+sb google connect personal   # un alias por cada correo Gmail (abre el navegador)
+sb google connect falp
+sb google sync               # Calendar ±30 días + Drive incremental, todas las cuentas
+```
+
+Configuración de la credencial OAuth (una vez):
+[docs/07-conectores-google.md](docs/07-conectores-google.md).
 
 Con credenciales de Claude (`ANTHROPIC_API_KEY` o perfil de `ant auth login`)
 la ingesta extrae conocimiento semánticamente y `sb ask` responde citando

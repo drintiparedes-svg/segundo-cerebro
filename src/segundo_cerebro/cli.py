@@ -91,6 +91,53 @@ def cmd_timeline(args) -> int:
     return 0
 
 
+def cmd_google_connect(args) -> int:
+    from .connectors.google_auth import GoogleAuthError, get_credentials
+    try:
+        get_credentials(args.alias, interactive=True)
+    except GoogleAuthError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    print(f"Cuenta «{args.alias}» autorizada. Sincroniza con: sb google sync")
+    return 0
+
+
+def cmd_google_accounts(args) -> int:
+    from .connectors.google_auth import list_accounts
+    accounts = list_accounts()
+    if not accounts:
+        print("Sin cuentas conectadas. Usa: sb google connect <alias>")
+    for alias in accounts:
+        print(alias)
+    return 0
+
+
+def cmd_google_sync(args) -> int:
+    from .connectors.google_auth import list_accounts
+    from .connectors.google_sync import sync_all
+
+    accounts = [args.account] if args.account else list_accounts()
+    if not accounts:
+        print("Sin cuentas conectadas. Usa: sb google connect <alias>", file=sys.stderr)
+        return 1
+
+    summary = sync_all(
+        _store(args), accounts=accounts,
+        calendar=not args.no_calendar, drive=not args.no_drive,
+        days_back=args.days_back, days_forward=args.days_forward,
+        drive_query=args.query, prefer_llm=not args.no_llm,
+    )
+    for alias, info in summary["accounts"].items():
+        line = f"[{alias}] calendar: {info['calendar']} · drive: {info['drive']}"
+        print(line)
+        for err in info["errors"]:
+            print(f"[{alias}] ERROR {err}", file=sys.stderr)
+    print(f"Documentos nuevos: {summary['documents']} · "
+          f"KOs: {summary['knowledge_objects']} · "
+          f"entidades: {summary['entities']} · relaciones: {summary['relationships']}")
+    return 1 if any(i["errors"] for i in summary["accounts"].values()) else 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
     serve(BrainStore(args.db), host=args.host, port=args.port)
@@ -129,6 +176,26 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("timeline", help="memoria episódica (eventos)")
     p.set_defaults(func=cmd_timeline)
+
+    g = sub.add_parser("google", help="conectores Google (Drive + Calendar, multi-cuenta)")
+    gsub = g.add_subparsers(dest="google_command", required=True)
+
+    gp = gsub.add_parser("connect", help="autoriza una cuenta Gmail (abre el navegador)")
+    gp.add_argument("alias", help="nombre corto de la cuenta: personal, falp, …")
+    gp.set_defaults(func=cmd_google_connect)
+
+    gp = gsub.add_parser("accounts", help="lista cuentas conectadas")
+    gp.set_defaults(func=cmd_google_accounts)
+
+    gp = gsub.add_parser("sync", help="sincroniza Calendar y Drive a la memoria")
+    gp.add_argument("--account", help="solo esta cuenta (default: todas)")
+    gp.add_argument("--no-calendar", action="store_true")
+    gp.add_argument("--no-drive", action="store_true")
+    gp.add_argument("--days-back", type=int, default=30, help="eventos pasados (default 30)")
+    gp.add_argument("--days-forward", type=int, default=30, help="eventos futuros (default 30)")
+    gp.add_argument("--query", help="filtro extra de Drive, p. ej. \"name contains 'FALP'\"")
+    gp.add_argument("--no-llm", action="store_true", help="extracción heurística")
+    gp.set_defaults(func=cmd_google_sync)
 
     p = sub.add_parser("serve", help="UI web con el grafo de conocimiento")
     p.add_argument("--host", default="127.0.0.1")
