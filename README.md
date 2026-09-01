@@ -22,6 +22,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [06 · Roadmap](docs/06-roadmap.md) | V1 Memory OS → V4 Agentic Second Brain |
 | [07 · Conectores Google](docs/07-conectores-google.md) | Drive + Calendar multi-cuenta (OAuth readonly) |
 | [08 · Despliegue en Vercel](docs/08-despliegue-vercel.md) | vitrina pública en modo demo; el cerebro sigue local |
+| [09 · Fuentes locales y escritorio](docs/09-fuentes-locales.md) | carpetas como fuentes de solo lectura + acceso directo |
 
 ## Quickstart
 
@@ -35,6 +36,16 @@ sb decisions                # decision ledger
 sb timeline                 # memoria episódica
 sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:8765
 ```
+
+### Conectar las carpetas de tu escritorio (solo lectura)
+
+```bash
+sb desktop                  # acceso directo «Segundo Cerebro» + registra tus carpetas
+sb sources sync --no-llm    # primera sincronización (md, txt, csv; pdf/docx con ".[files]")
+```
+
+El sistema solo LEE esas carpetas; jamás modifica su contenido. Detalles:
+[docs/09-fuentes-locales.md](docs/09-fuentes-locales.md).
 
 ### Conectar tus cuentas Google (Drive + Calendar)
 

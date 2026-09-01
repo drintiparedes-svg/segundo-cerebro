@@ -147,6 +147,94 @@ def cmd_google_sync(args) -> int:
     return 1 if any(i["errors"] for i in summary["accounts"].values()) else 0
 
 
+def _brain_dir(args) -> Path:
+    return Path(args.db).parent
+
+
+def cmd_sources_add(args) -> int:
+    from .connectors.localfs import add_source
+    entry = add_source(_brain_dir(args), args.path, alias=args.alias)
+    print(f"Fuente registrada (solo lectura): {entry['alias']} → {entry['path']}")
+    return 0
+
+
+def cmd_sources_list(args) -> int:
+    from .connectors.localfs import load_registry
+    registry = load_registry(_brain_dir(args))
+    if not registry["sources"]:
+        print("Sin fuentes locales. Usa: sb sources add <carpeta>  o  sb desktop")
+        return 0
+    for s in registry["sources"]:
+        state = registry["state"].get(s["path"], {})
+        last = state.get("last_sync", "nunca sincronizada")
+        print(f"{s['alias']:24} {s['path']}  (última sync: {last})")
+    return 0
+
+
+def cmd_sources_remove(args) -> int:
+    from .connectors.localfs import remove_source
+    ok = remove_source(_brain_dir(args), args.path)
+    print("Fuente eliminada del registro." if ok else "Esa ruta no estaba registrada.")
+    return 0
+
+
+def cmd_sources_sync(args) -> int:
+    from .connectors.localfs import load_registry, sync_source
+    from .extract import get_extractor
+    from .ingest import new_summary, process_document
+
+    store = _store(args)
+    brain_dir = _brain_dir(args)
+    registry = load_registry(brain_dir)
+    if not registry["sources"]:
+        print("Sin fuentes locales. Usa: sb sources add <carpeta>  o  sb desktop",
+              file=sys.stderr)
+        return 1
+
+    extractor = get_extractor(prefer_llm=not args.no_llm)
+    summary = new_summary(extractor)
+    for source in registry["sources"]:
+        result = sync_source(store, brain_dir, source)
+        if "error" in result:
+            print(f"[{source['alias']}] AVISO: {result['error']}", file=sys.stderr)
+            continue
+        for doc in result["docs"]:
+            summary["documents"] += 1
+            process_document(store, doc, extractor, summary)
+        print(f"[{source['alias']}] nuevos: {result['added']} · "
+              f"sin cambios: {result['unchanged']} · "
+              f"no soportados: {result['unsupported']}")
+    print(f"Total — documentos: {summary['documents']} · KOs: {summary['knowledge_objects']} · "
+          f"entidades: {summary['entities']} · relaciones: {summary['relationships']}")
+    return 0
+
+
+def cmd_desktop(args) -> int:
+    from .desktop import create_shortcut, find_desktop, register_desktop_folders
+
+    desktop = Path(args.path).expanduser() if args.path else find_desktop()
+    if not desktop or not desktop.is_dir():
+        print("No pude detectar tu escritorio. Indícalo con: sb desktop --path <ruta>",
+              file=sys.stderr)
+        return 1
+
+    registered = register_desktop_folders(_brain_dir(args), desktop)
+    shortcut = create_shortcut(desktop, Path.cwd(), port=args.port)
+
+    print(f"Escritorio: {desktop}")
+    print(f"Acceso directo creado: {shortcut}")
+    if registered:
+        print(f"Carpetas conectadas como fuentes de SOLO lectura ({len(registered)}):")
+        for entry in registered:
+            print(f"  · {entry['alias']}")
+    else:
+        print("Tu escritorio no tiene subcarpetas; agrega fuentes con sb sources add.")
+    print("\nSiguiente paso — primera sincronización (heurística, sin costo):")
+    print("  sb sources sync --no-llm")
+    print("Con extracción semántica de Claude: sb sources sync")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
     if args.snapshot:
@@ -190,6 +278,30 @@ def main(argv: list[str] | None = None) -> int:
 
     p = sub.add_parser("timeline", help="memoria episódica (eventos)")
     p.set_defaults(func=cmd_timeline)
+
+    so = sub.add_parser("sources", help="carpetas locales como fuentes (solo lectura)")
+    ssub = so.add_subparsers(dest="sources_command", required=True)
+
+    sp = ssub.add_parser("add", help="registra una carpeta")
+    sp.add_argument("path")
+    sp.add_argument("--alias")
+    sp.set_defaults(func=cmd_sources_add)
+
+    sp = ssub.add_parser("list", help="lista las fuentes registradas")
+    sp.set_defaults(func=cmd_sources_list)
+
+    sp = ssub.add_parser("remove", help="quita una carpeta del registro")
+    sp.add_argument("path")
+    sp.set_defaults(func=cmd_sources_remove)
+
+    sp = ssub.add_parser("sync", help="sincroniza todas las fuentes a la memoria")
+    sp.add_argument("--no-llm", action="store_true", help="extracción heurística")
+    sp.set_defaults(func=cmd_sources_sync)
+
+    p = sub.add_parser("desktop", help="acceso directo + carpetas del escritorio como fuentes")
+    p.add_argument("--path", help="ruta del escritorio si la detección falla")
+    p.add_argument("--port", type=int, default=8765)
+    p.set_defaults(func=cmd_desktop)
 
     p = sub.add_parser("export", help="exporta la memoria a un snapshot JSON (para desplegar)")
     p.add_argument("output", nargs="?", default="data/snapshot.json")
