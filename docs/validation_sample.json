@@ -1,0 +1,33 @@
+{
+  "n_doctors": 60,
+  "n_injected": 9,
+  "precision_at_k": 1.0,
+  "recall_at_k": 1.0,
+  "injected_in_level_ge3": 0.8888888888888888,
+  "normal_in_level_ge3": 0.0,
+  "normal_in_level_ge2": 0.0,
+  "normal_in_level_ge1": 0.058823529411764705,
+  "rank_by_scenario": {
+    "ghost_records": [
+      7,
+      8
+    ],
+    "hours_overbilling": [
+      3,
+      4
+    ],
+    "off_schedule": [
+      2
+    ],
+    "phantom_hours": [
+      5,
+      6
+    ],
+    "productivity_collapse": [
+      1,
+      9
+    ]
+  },
+  "mean_score_injected": 77.27777777777777,
+  "mean_score_normal": 9.241176470588236
+}
