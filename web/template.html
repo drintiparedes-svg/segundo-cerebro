@@ -1,0 +1,393 @@
+<title>Payment Integrity Demo</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{
+  color-scheme:light;
+  --page:#f5f7f9;--surface:#fcfcfb;--surface-2:#eef2f6;--ink:#0f1720;--ink-2:#4b5a68;--muted:#8a929b;
+  --grid:#e1e0d9;--axis:#c3c2b7;--line:rgba(15,23,32,.10);
+  --accent:#2a78d6;--accent-ink:#ffffff;--s2:#eb6834;--s3:#1baf7a;
+  --l0:#86b6ef;--l1:#5598e7;--l2:#2a78d6;--l3:#1c5cab;--l4:#0d366b;--l0-ink:#0f1720;--l-ink:#ffffff;
+  --info-bg:#e8f1fb;--info-ink:#1c5cab;
+}
+@media (prefers-color-scheme: dark){
+  :root:not([data-theme="light"]){
+    color-scheme:dark;
+    --page:#0d0d0d;--surface:#1a1a19;--surface-2:#242423;--ink:#ffffff;--ink-2:#c3c2b7;--muted:#898781;
+    --grid:#2c2c2a;--axis:#383835;--line:rgba(255,255,255,.10);
+    --accent:#3987e5;--accent-ink:#ffffff;--s2:#d95926;--s3:#199e70;
+    --l0:#86b6ef;--l1:#5598e7;--l2:#3987e5;--l3:#1c5cab;--l4:#184f95;--l0-ink:#0f1720;--l-ink:#ffffff;
+    --info-bg:#16233a;--info-ink:#9ec5f4;
+  }
+}
+:root[data-theme="dark"]{
+  color-scheme:dark;
+  --page:#0d0d0d;--surface:#1a1a19;--surface-2:#242423;--ink:#ffffff;--ink-2:#c3c2b7;--muted:#898781;
+  --grid:#2c2c2a;--axis:#383835;--line:rgba(255,255,255,.10);
+  --accent:#3987e5;--accent-ink:#ffffff;--s2:#d95926;--s3:#199e70;
+  --l0:#86b6ef;--l1:#5598e7;--l2:#3987e5;--l3:#1c5cab;--l4:#184f95;--l0-ink:#0f1720;--l-ink:#ffffff;
+  --info-bg:#16233a;--info-ink:#9ec5f4;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:14px;line-height:1.45}
+.mono{font-family:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace}
+.wrap{max-width:1240px;margin:0 auto;padding:0 24px 48px}
+header.top{display:flex;flex-wrap:wrap;align-items:flex-end;justify-content:space-between;gap:16px;padding:28px 0 16px;border-bottom:1px solid var(--line)}
+header.top h1{font-size:22px;font-weight:600;margin:0;letter-spacing:-.01em;text-wrap:balance}
+header.top .sub{color:var(--ink-2);margin-top:4px}
+.badge{display:inline-block;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:500;letter-spacing:.04em;text-transform:uppercase;background:var(--surface-2);color:var(--ink-2)}
+.badge.demo{background:var(--info-bg);color:var(--info-ink)}
+nav.tabs{display:flex;gap:4px;margin:16px 0 20px;border-bottom:1px solid var(--line);overflow-x:auto}
+nav.tabs button{appearance:none;background:none;border:0;border-bottom:2px solid transparent;padding:10px 14px;font:inherit;font-weight:500;color:var(--ink-2);cursor:pointer;white-space:nowrap}
+nav.tabs button[aria-selected="true"]{color:var(--accent);border-bottom-color:var(--accent)}
+nav.tabs button:focus-visible{outline:2px solid var(--accent);outline-offset:-2px;border-radius:4px}
+section.view{display:none}section.view.active{display:block}
+h2{font-size:17px;font-weight:600;margin:28px 0 10px;text-wrap:balance}
+h3{font-size:14px;font-weight:600;margin:0 0 8px}
+p.lead{color:var(--ink-2);max-width:68ch;margin:0 0 12px}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:18px 0}
+.kpi{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 14px}
+.kpi .l{font-size:12px;color:var(--ink-2)}
+.kpi .v{font-size:22px;font-weight:600;margin-top:2px;letter-spacing:-.01em;overflow-wrap:anywhere}
+.kpi .h{font-size:11px;color:var(--muted);margin-top:2px}
+.grid{display:grid;gap:14px}
+.grid.c2{grid-template-columns:repeat(auto-fit,minmax(420px,1fr))}
+.grid.c32{grid-template-columns:3fr 2fr}
+@media (max-width:900px){.grid.c32{grid-template-columns:1fr}}
+.panel{background:var(--surface);border:1px solid var(--line);border-radius:6px;padding:12px 12px 6px;min-width:0}
+.panel .chart{width:100%;min-height:300px}
+.tablewrap{overflow-x:auto;background:var(--surface);border:1px solid var(--line);border-radius:6px}
+table{border-collapse:collapse;width:100%;font-size:13px}
+th,td{padding:7px 10px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top;white-space:nowrap}
+th{position:sticky;top:0;background:var(--surface);color:var(--ink-2);font-weight:600;font-size:12px}
+td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}
+td.wrap{white-space:normal;min-width:320px}
+tr.click{cursor:pointer}tr.click:hover{background:var(--surface-2)}
+.lvl{display:inline-block;padding:2px 8px;border-radius:999px;font-size:11px;font-weight:500;color:var(--l-ink);background:var(--l2)}
+.lvl.l0{background:var(--l0);color:var(--l0-ink)}.lvl.l1{background:var(--l1)}.lvl.l2{background:var(--l2)}.lvl.l3{background:var(--l3)}.lvl.l4{background:var(--l4)}
+.bar{height:6px;background:var(--grid);border-radius:3px;overflow:hidden;min-width:90px}.bar i{display:block;height:100%;background:var(--accent)}
+.controls{display:flex;flex-wrap:wrap;gap:12px;align-items:end;margin:10px 0 14px}
+.controls label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--ink-2)}
+select,input[type=range]{font:inherit;color:var(--ink);background:var(--surface);border:1px solid var(--line);border-radius:4px;padding:6px 8px;min-width:220px}
+select:focus-visible{outline:2px solid var(--accent)}
+.explain{background:var(--info-bg);color:var(--info-ink);border-radius:6px;padding:12px 14px;margin:10px 0;line-height:1.5}
+.note{font-size:12px;color:var(--muted)}
+.chips{display:flex;flex-wrap:wrap;gap:6px}
+.chip{font-size:11px;padding:2px 8px;border-radius:4px;background:var(--surface-2);color:var(--ink-2)}
+.chip.crit{background:var(--l3);color:var(--l-ink)}
+iframe.report{width:100%;height:1400px;border:1px solid var(--line);border-radius:6px;background:#fff}
+footer{margin-top:40px;padding-top:14px;border-top:1px solid var(--line);font-size:12px;color:var(--muted);max-width:80ch}
+@media (prefers-reduced-motion: no-preference){nav.tabs button{transition:color .15s,border-color .15s}}
+</style>
+
+<div class="wrap">
+  <header class="top">
+    <div>
+      <h1>Payment Integrity — pagos médicos por hora</h1>
+      <div class="sub" id="subtitle">Vista de demostración con resultados precalculados</div>
+    </div>
+    <div class="chips">
+      <span class="badge demo">Demo · data sintética</span>
+      <span class="badge" id="period-badge"></span>
+    </div>
+  </header>
+
+  <nav class="tabs" role="tablist" aria-label="Secciones">
+    <button role="tab" aria-selected="true" data-view="resumen">Resumen ejecutivo</button>
+    <button role="tab" aria-selected="false" data-view="metricas">Métricas y reglas</button>
+    <button role="tab" aria-selected="false" data-view="red">Red de relaciones</button>
+    <button role="tab" aria-selected="false" data-view="ficha">Ficha por médico</button>
+    <button role="tab" aria-selected="false" data-view="informe">Informe de hallazgos</button>
+    <button role="tab" aria-selected="false" data-view="metodo">Método</button>
+  </nav>
+
+  <section class="view active" id="view-resumen">
+    <p class="lead">Priorización de auditoría sobre 60 médicos y seis meses de data sintética con seis escenarios de riesgo inyectados. El score mide riesgo de pago indebido; el fraude solo se confirma tras investigación.</p>
+    <div class="kpis" id="kpis"></div>
+    <div class="grid c2">
+      <div class="panel"><div id="ch-levels" class="chart"></div></div>
+      <div class="panel"><div id="ch-hist" class="chart"></div></div>
+    </div>
+    <div class="grid c32" style="margin-top:14px">
+      <div class="panel"><div id="ch-top" class="chart" style="min-height:440px"></div></div>
+      <div class="grid" style="grid-template-columns:1fr">
+        <div class="panel"><div id="ch-time" class="chart" style="min-height:210px"></div></div>
+        <div class="panel"><div id="ch-l3" class="chart" style="min-height:210px"></div></div>
+      </div>
+    </div>
+    <h2>Ranking consolidado por médico</h2>
+    <p class="note">Score consolidado = máx(0,75·peor mes + 0,25·promedio, último mes). Pulse una fila para abrir la ficha.</p>
+    <div class="tablewrap" style="max-height:520px;overflow:auto"><table id="tbl-rank"></table></div>
+    <h2>Validación contra escenarios inyectados</h2>
+    <div class="kpis" id="validation"></div>
+  </section>
+
+  <section class="view" id="view-metricas">
+    <div class="controls">
+      <label>Peer group<select id="f-pg"></select></label>
+      <label>Período<select id="f-period"></select></label>
+      <label>Nivel mínimo<select id="f-lvl"><option value="0">0</option><option value="1">1</option><option value="2">2</option><option value="3">3</option><option value="4">4</option></select></label>
+      <span class="note" id="f-count"></span>
+    </div>
+    <div class="grid c2">
+      <div class="panel"><div id="ch-scatter" class="chart" style="min-height:380px"></div></div>
+      <div class="panel"><div id="ch-rules" class="chart" style="min-height:380px"></div></div>
+    </div>
+    <div class="panel" style="margin-top:14px"><div id="ch-heat" class="chart" style="min-height:520px"></div></div>
+    <h2>Catálogo de reglas</h2>
+    <div class="tablewrap"><table id="tbl-rules"></table></div>
+  </section>
+
+  <section class="view" id="view-red">
+    <p class="lead">Proyección médico–médico: dos médicos están unidos si atendieron a los mismos pacientes en el mes. El grosor de la arista es el número de pacientes compartidos; el color del nodo, el nivel de riesgo. Solo se dibujan médicos con al menos un vínculo.</p>
+    <div class="controls">
+      <label>Período<select id="g-period"></select></label>
+      <label>Pacientes compartidos mínimos <span class="mono" id="g-min-val">3</span><input type="range" id="g-min" min="2" max="20" value="3"></label>
+    </div>
+    <div class="panel"><div id="ch-net" class="chart" style="min-height:520px"></div></div>
+    <div class="grid c2" style="margin-top:14px">
+      <div><h3>Vínculos más fuertes</h3><div class="tablewrap" style="max-height:360px;overflow:auto"><table id="tbl-edges"></table></div></div>
+      <div><h3>Señales de red por médico</h3><div class="tablewrap" style="max-height:360px;overflow:auto"><table id="tbl-graph"></table></div></div>
+    </div>
+  </section>
+
+  <section class="view" id="view-ficha">
+    <div class="controls">
+      <label>Médico (ordenados por riesgo)<select id="d-doc"></select></label>
+      <label>Período<select id="d-period"></select></label>
+    </div>
+    <div class="kpis" id="d-kpis"></div>
+    <div class="explain" id="d-explain"></div>
+    <div class="grid c2">
+      <div class="panel"><div id="ch-dims" class="chart" style="min-height:280px"></div></div>
+      <div class="panel"><div id="ch-week" class="chart" style="min-height:280px"></div></div>
+    </div>
+    <h2>Trayectoria mensual</h2>
+    <div class="tablewrap"><table id="tbl-traj"></table></div>
+    <h2>Alertas por regla</h2>
+    <div class="tablewrap"><table id="tbl-alerts"></table></div>
+  </section>
+
+  <section class="view" id="view-informe">
+    <p class="lead">Informe de hallazgos generado por el módulo de reportería (nivel ≥ 3, top 20). En el tablero interactivo se exporta en HTML, Markdown, Excel y CSV.</p>
+    <iframe class="report" id="report-frame" title="Informe de hallazgos"></iframe>
+  </section>
+
+  <section class="view" id="view-metodo">
+    <h2>Arquitectura híbrida</h2>
+    <p class="lead">Seis capas complementarias: conciliación contractual, reglas de negocio, perfil de pares con z-score robusto, anomalías no supervisadas (Isolation Forest y LOF), change detection (EWMA y CUSUM), grafo médico–paciente y, cuando existen auditorías cerradas, una capa supervisada.</p>
+    <div class="tablewrap"><table id="tbl-weights"></table></div>
+    <h2>Escala de niveles</h2>
+    <div class="tablewrap"><table id="tbl-levels"></table></div>
+    <h2>Qué no hace esta vista</h2>
+    <p class="lead">Esta página es estática: no carga archivos ni ejecuta el modelo. La versión interactiva (Streamlit, en contenedor) permite subir las tablas, ejecutar el modelo, gestionar casos de auditoría y entrenar la capa supervisada. Los datos son sintéticos; ningún médico ni paciente es real.</p>
+  </section>
+
+  <footer>Payment Integrity Engine · resultados precalculados sobre data sintética · el score mide riesgo de pago indebido y prioriza auditorías; no constituye imputación.</footer>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/plotly.js/2.35.2/plotly.min.js"></script>
+<script>
+const DATA = /*__DATA__*/{};
+const REPORT_HTML = /*__REPORT__*/"";
+(function(){
+  const css = (n)=>getComputedStyle(document.documentElement).getPropertyValue(n).trim();
+  const T = ()=>({surface:css('--surface'),ink:css('--ink'),ink2:css('--ink-2'),muted:css('--muted'),grid:css('--grid'),axis:css('--axis'),
+                  accent:css('--accent'),s2:css('--s2'),s3:css('--s3'),ramp:[css('--l0'),css('--l1'),css('--l2'),css('--l3'),css('--l4')]});
+  const LV = DATA.level_labels, DIMS = DATA.dimensions, DL = DATA.dimension_labels;
+  const clp = v => '$' + Math.round(v).toLocaleString('es-CL');
+  const pct = v => (v==null||isNaN(v)) ? 'n/d' : Math.round(v*100)+'%';
+  const esc = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+  const lvlTag = l => `<span class="lvl l${l}">Nivel ${l}</span>`;
+  const D = DATA.doctor_scores, S = DATA.scored_periods, W = DATA.change_weekly, E = DATA.graph_edges, A = DATA.alerts;
+  const periods = DATA.periods;
+  document.getElementById('period-badge').textContent = periods[0] + ' → ' + periods[periods.length-1] + ' · ' + D.length + ' médicos';
+
+  function layout(title, extra){
+    const t = T();
+    return Object.assign({title:{text:title,font:{size:14,color:t.ink},x:0,xanchor:'left'},paper_bgcolor:t.surface,plot_bgcolor:t.surface,
+      font:{family:'IBM Plex Sans, system-ui, sans-serif',color:t.ink,size:12},margin:{l:8,r:8,t:40,b:8},
+      legend:{orientation:'h',y:-0.18,x:0,font:{size:11,color:t.ink2},bgcolor:'rgba(0,0,0,0)'},hovermode:'closest',
+      xaxis:{showgrid:false,linecolor:t.axis,tickfont:{color:t.muted,size:11},title:{font:{color:t.ink2,size:11}},zeroline:false,automargin:true},
+      yaxis:{gridcolor:t.grid,linecolor:'rgba(0,0,0,0)',tickfont:{color:t.muted,size:11},title:{font:{color:t.ink2,size:11}},zeroline:false,automargin:true}}, extra||{});
+  }
+  const cfg = {displayModeBar:false,responsive:true};
+  function plot(id, traces, lay){ Plotly.react(id, traces, lay, cfg); }
+  const deepSet = (o,path,v)=>{const p=path.split('.');let c=o;for(let i=0;i<p.length-1;i++){c[p[i]]=c[p[i]]||{};c=c[p[i]];}c[p[p.length-1]]=v;return o;};
+
+  // ---------------- Resumen ----------------
+  function renderSummary(){
+    const t = T();
+    const tot = D.reduce((a,r)=>a+r.total_paid,0), idle = D.reduce((a,r)=>a+r.idle_amount,0), risk = D.reduce((a,r)=>a+r.amount_at_risk,0);
+    const n3 = D.filter(r=>r.doctor_risk_level>=3).length;
+    document.getElementById('kpis').innerHTML = [
+      ['Médicos evaluados', D.length, ''], ['Médico-períodos', S.length, ''], ['Pago total', clp(tot), 'seis meses'],
+      ['Sin respaldo de actividad', clp(idle), 'horas ociosas × valor hora'], ['Sobre contrato o duplicado', clp(risk), 'evidencia directa'],
+      ['Médicos nivel ≥ 3', n3, 'requieren revisión humana']
+    ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v">${k[1]}</div><div class="h">${k[2]}</div></div>`).join('');
+
+    const counts = [0,1,2,3,4].map(l=>D.filter(r=>r.doctor_risk_level===l).length);
+    const ll = layout('Médicos por nivel de riesgo (consolidado)'); ll.yaxis.title.text='Médicos'; ll.yaxis.range=[0, Math.max(...counts)*1.18]; ll.xaxis.tickangle=0; ll.margin.b=10;
+    plot('ch-levels', [{type:'bar',x:[0,1,2,3,4].map(l=>'N'+l),y:counts,marker:{color:t.ramp},width:.6,text:counts,textposition:'outside',textfont:{color:t.ink2},
+      customdata:[0,1,2,3,4].map(l=>LV[l]),hovertemplate:'Nivel %{x} · %{customdata}<br>%{y} médicos<extra></extra>'}], ll);
+    const hist = layout('Distribución del risk score por médico');
+    hist.xaxis.title.text='Risk score (0-100)'; hist.xaxis.range=[0,100]; hist.yaxis.title.text='Médicos';
+    hist.shapes=[20,40,60,75].map(x=>({type:'line',x0:x,x1:x,y0:0,y1:1,yref:'paper',line:{color:t.axis,width:1}}));
+    hist.annotations=[20,40,60,75].map((x,i)=>({x:x,y:1,yref:'paper',text:'N'+(i+1),showarrow:false,font:{color:t.muted,size:10},xanchor:'left',yanchor:'top'}));
+    plot('ch-hist',[{type:'histogram',x:D.map(r=>r.doctor_risk_score),xbins:{start:0,end:100,size:5},marker:{color:t.accent,line:{color:t.surface,width:2}},hovertemplate:'Score %{x}<br>%{y} médicos<extra></extra>'}],hist);
+    const top = D.slice(0,15).reverse();
+    const lt = layout('Top 15 médicos priorizados (color = nivel)'); lt.xaxis.title.text='Risk score'; lt.xaxis.range=[0,110]; lt.yaxis.showgrid=false; lt.margin.l=70;
+    plot('ch-top',[{type:'bar',orientation:'h',x:top.map(r=>r.doctor_risk_score),y:top.map(r=>r.doctor_id),marker:{color:top.map(r=>t.ramp[r.doctor_risk_level])},width:.65,
+      text:top.map(r=>Math.round(r.doctor_risk_score)),textposition:'outside',textfont:{color:t.ink2},customdata:top.map(r=>[r.peer_group,r.doctor_risk_level_label,r.worst_period]),
+      hovertemplate:'<b>%{y}</b> · %{customdata[0]}<br>Score %{x:.0f} · %{customdata[1]}<br>Peor período %{customdata[2]}<extra></extra>'}],lt);
+    const byP = periods.map(p=>S.filter(r=>r.period===p));
+    const mean = byP.map(g=>g.reduce((a,r)=>a+r.risk_score,0)/g.length), p90 = byP.map(g=>{const v=g.map(r=>r.risk_score).sort((a,b)=>a-b);return v[Math.floor(.9*(v.length-1))];});
+    const lt2 = layout('Evolución mensual del risk score',{hovermode:'x unified'}); lt2.yaxis.range=[0,100]; lt2.xaxis.type='category'; lt2.margin.t=36;
+    plot('ch-time',[{type:'scatter',mode:'lines+markers',name:'Percentil 90',x:periods,y:p90,line:{color:t.s2,width:2},marker:{size:8,line:{color:t.surface,width:2}}},
+      {type:'scatter',mode:'lines+markers',name:'Promedio',x:periods,y:mean,line:{color:t.accent,width:2},marker:{size:8,line:{color:t.surface,width:2}}}],lt2);
+    const n3p = byP.map(g=>g.filter(r=>r.risk_level>=3).length);
+    const lt3 = layout('Casos nivel ≥ 3 por mes'); lt3.xaxis.type='category'; lt3.yaxis.title.text='Médico-períodos'; lt3.margin.t=36; lt3.yaxis.range=[0, Math.max(...n3p)*1.2];
+    plot('ch-l3',[{type:'bar',x:periods,y:n3p,marker:{color:t.accent},width:.5,text:n3p,textposition:'outside',textfont:{color:t.ink2},hovertemplate:'%{x}<br>%{y} casos<extra></extra>'}],lt3);
+
+    document.getElementById('tbl-rank').innerHTML = '<thead><tr><th>Médico</th><th>Peer group</th><th>Score</th><th class="n"></th><th>Nivel</th><th>Peor período</th><th class="n">Pagado</th><th class="n">Sin respaldo</th><th class="n">Sobre contrato</th><th>Principales impulsores</th></tr></thead><tbody>' +
+      D.map(r=>`<tr class="click" data-doc="${r.doctor_id}"><td class="mono">${r.doctor_id}</td><td>${esc(r.peer_group)}</td><td><div class="bar"><i style="width:${r.doctor_risk_score}%"></i></div></td><td class="n">${Math.round(r.doctor_risk_score)}</td><td>${lvlTag(r.doctor_risk_level)}</td><td class="mono">${r.worst_period}</td><td class="n">${clp(r.total_paid)}</td><td class="n">${clp(r.idle_amount)}</td><td class="n">${clp(r.amount_at_risk)}</td><td class="wrap">${esc(r.top_drivers)}</td></tr>`).join('') + '</tbody>';
+    document.querySelectorAll('#tbl-rank tr.click').forEach(tr=>tr.addEventListener('click',()=>{openDoctor(tr.dataset.doc);}));
+    const v = DATA.validation;
+    if(v){ document.getElementById('validation').innerHTML = [
+      ['Precision@'+v.n_injected, v.precision_at_k.toFixed(2), 'inyectados en el top '+v.n_injected],
+      ['Inyectados en nivel ≥ 3', Math.round(v.injected_in_level_ge3*100)+'%', ''],
+      ['Normales en nivel ≥ 3', Math.round(v.normal_in_level_ge3*100)+'%', 'falsos positivos'],
+      ['Score medio inyectados / normales', Math.round(v.mean_score_injected)+' / '+Math.round(v.mean_score_normal), ''],
+      ['Ranking por escenario', Object.entries(v.rank_by_scenario).map(([k,vv])=>k+' → '+vv.join(', ')).join(' · '), '']
+    ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v" style="font-size:${k[0]==='Ranking por escenario'?'13px':'24px'};white-space:normal">${k[1]}</div><div class="h">${k[2]}</div></div>`).join(''); }
+  }
+
+  // ---------------- Métricas ----------------
+  const pgs = [...new Set(S.map(r=>r.peer_group))].sort();
+  const fill = (id, opts, all) => { const s=document.getElementById(id); s.innerHTML = (all?`<option value="">${all}</option>`:'') + opts.map(o=>`<option value="${esc(o)}">${esc(o)}</option>`).join(''); };
+  fill('f-pg', pgs, 'Todos'); fill('f-period', periods, 'Todos');
+  function renderMetrics(){
+    const t = T();
+    const pg = document.getElementById('f-pg').value, pe = document.getElementById('f-period').value, lv = +document.getElementById('f-lvl').value;
+    const sub = S.filter(r=>(!pg||r.peer_group===pg)&&(!pe||r.period===pe)&&r.risk_level>=lv);
+    document.getElementById('f-count').textContent = sub.length + ' médico-períodos en la selección';
+    const traces = [0,1,2,3,4].map(l=>{const g=sub.filter(r=>r.risk_level===l); return {type:'scatter',mode:'markers',name:l+' · '+LV[l],x:g.map(r=>r.patients_per_hour),y:g.map(r=>r.cost_per_patient),
+      marker:{size:9,color:t.ramp[l],line:{color:t.surface,width:1.5}},customdata:g.map(r=>[r.doctor_id,r.period,r.peer_group,r.risk_score]),
+      hovertemplate:'<b>%{customdata[0]}</b> · %{customdata[1]}<br>%{customdata[2]}<br>%{x:.2f} pac/h · $%{y:,.0f}/paciente · score %{customdata[3]:.0f}<extra></extra>'};}).filter(tr=>tr.x.length);
+    const ls = layout('Rendimiento vs costo por paciente (cada punto = médico-mes)'); ls.xaxis.title.text='Pacientes por hora pagada'; ls.yaxis.title.text='Costo por paciente (CLP)';
+    plot('ch-scatter',traces,ls);
+    const keys = new Set(sub.map(r=>r.doctor_id+'|'+r.period));
+    const al = A.filter(a=>keys.has(a.doctor_id+'|'+a.period));
+    const codes = DATA.rules.map(r=>r.code);
+    const cnt = codes.map(c=>al.filter(a=>a.rule===c).length), med = codes.map(c=>new Set(al.filter(a=>a.rule===c).map(a=>a.doctor_id)).size);
+    const lr = layout('Frecuencia de reglas activadas',{barmode:'group',bargap:.3}); lr.yaxis.title.text='Conteo';
+    plot('ch-rules',[{type:'bar',name:'Alertas (médico-mes)',x:codes,y:cnt,marker:{color:t.accent},width:.35,offsetgroup:0},{type:'bar',name:'Médicos distintos',x:codes,y:med,marker:{color:t.s2},width:.35,offsetgroup:1}],lr);
+    const maxBy = {}; sub.forEach(r=>{ if(!maxBy[r.doctor_id]) maxBy[r.doctor_id]={score:0,row:{}}; maxBy[r.doctor_id].score=Math.max(maxBy[r.doctor_id].score,r.risk_score); codes.forEach(c=>{maxBy[r.doctor_id].row[c]=Math.max(maxBy[r.doctor_id].row[c]||0, r[c+'_intensity']||0);}); });
+    const docs = Object.entries(maxBy).sort((a,b)=>b[1].score-a[1].score).slice(0,20);
+    const lh = layout('Intensidad máxima por regla · top '+docs.length+' médicos'); lh.yaxis.autorange='reversed'; lh.yaxis.showgrid=false; lh.margin.l=70;
+    plot('ch-heat',[{type:'heatmap',z:docs.map(d=>codes.map(c=>d[1].row[c])),x:codes,y:docs.map(d=>d[0]),colorscale:[[0,'#cde2fb'],[.5,'#3987e5'],[1,'#0d366b']],zmin:0,zmax:1,xgap:2,ygap:2,
+      colorbar:{title:'Intensidad',thickness:10,tickfont:{color:t.muted}},hovertemplate:'%{y} · %{x}<br>Intensidad máx. %{z:.2f}<extra></extra>'}],lh);
+    document.getElementById('tbl-rules').innerHTML = '<thead><tr><th>Código</th><th>Regla</th><th>Dimensión</th><th>Crítica</th><th class="n">Alertas</th><th class="n">Médicos</th></tr></thead><tbody>' +
+      DATA.rules.map((r,i)=>`<tr><td class="mono">${r.code}</td><td class="wrap">${esc(r.name)}</td><td>${esc(DL[r.dimension])}</td><td>${r.critical?'<span class="chip crit">crítica</span>':'<span class="chip">no</span>'}</td><td class="n">${cnt[i]}</td><td class="n">${med[i]}</td></tr>`).join('') + '</tbody>';
+  }
+  ['f-pg','f-period','f-lvl'].forEach(id=>document.getElementById(id).addEventListener('change',renderMetrics));
+
+  // ---------------- Red ----------------
+  fill('g-period', periods); document.getElementById('g-period').value = periods[periods.length-1];
+  function forceLayout(nodes, edges){
+    const pos = {}; const n = nodes.length; nodes.forEach((d,i)=>{const a=2*Math.PI*i/n; pos[d]=[Math.cos(a),Math.sin(a)];});
+    const k = 1.6/Math.sqrt(Math.max(n,1)); const wmax = Math.max(...edges.map(e=>e.w),1);
+    for(let it=0;it<250;it++){ const disp={}; nodes.forEach(d=>disp[d]=[0,0]); const temp = .1*(1-it/250)+.005;
+      for(let i=0;i<n;i++) for(let j=i+1;j<n;j++){ const a=nodes[i],b=nodes[j]; let dx=pos[a][0]-pos[b][0],dy=pos[a][1]-pos[b][1]; let d=Math.hypot(dx,dy)||1e-3; const f=k*k/d; disp[a][0]+=dx/d*f;disp[a][1]+=dy/d*f;disp[b][0]-=dx/d*f;disp[b][1]-=dy/d*f; }
+      edges.forEach(e=>{ let dx=pos[e.a][0]-pos[e.b][0],dy=pos[e.a][1]-pos[e.b][1]; let d=Math.hypot(dx,dy)||1e-3; const f=d*d/k*(0.3+0.7*e.w/wmax); disp[e.a][0]-=dx/d*f;disp[e.a][1]-=dy/d*f;disp[e.b][0]+=dx/d*f;disp[e.b][1]+=dy/d*f; });
+      nodes.forEach(d=>{ const m=Math.hypot(disp[d][0],disp[d][1])||1e-3; const s=Math.min(m,temp)/m; pos[d][0]+=disp[d][0]*s; pos[d][1]+=disp[d][1]*s; }); }
+    return pos;
+  }
+  function renderNet(){
+    const t = T(); const pe = document.getElementById('g-period').value, mn = +document.getElementById('g-min').value;
+    document.getElementById('g-min-val').textContent = mn;
+    const edges = E.filter(e=>e.period===pe && e.shared_patients>=mn).map(e=>({a:e.doctor_a,b:e.doctor_b,w:e.shared_patients,j:e.jaccard}));
+    const nodes = [...new Set(edges.flatMap(e=>[e.a,e.b]))].sort();
+    const lvl = {}; S.filter(r=>r.period===pe).forEach(r=>lvl[r.doctor_id]=r.risk_level);
+    const ln = layout('Red médico–médico · '+pe+' · aristas ≥ '+mn+' pacientes'); ln.xaxis.visible=false; ln.yaxis.visible=false; ln.showlegend=false;
+    if(!nodes.length){ plot('ch-net',[],Object.assign(ln,{annotations:[{text:'Ningún par de médicos comparte ese número de pacientes en el período',showarrow:false,font:{color:t.muted}}]})); }
+    else {
+      const pos = forceLayout(nodes, edges); const wmax = Math.max(...edges.map(e=>e.w));
+      const tr = [];
+      edges.forEach(e=>{ tr.push({type:'scatter',mode:'lines',x:[pos[e.a][0],pos[e.b][0]],y:[pos[e.a][1],pos[e.b][1]],line:{color:t.axis,width:1+5*e.w/wmax},hoverinfo:'skip',showlegend:false});
+        tr.push({type:'scatter',mode:'markers',x:[(pos[e.a][0]+pos[e.b][0])/2],y:[(pos[e.a][1]+pos[e.b][1])/2],marker:{size:14,color:'rgba(0,0,0,0)'},showlegend:false,hovertemplate:`${e.a} – ${e.b}<br>${e.w} pacientes compartidos · Jaccard ${e.j.toFixed(2)}<extra></extra>`}); });
+      const deg = {}; edges.forEach(e=>{deg[e.a]=(deg[e.a]||0)+1;deg[e.b]=(deg[e.b]||0)+1;});
+      tr.push({type:'scatter',mode:'markers+text',x:nodes.map(d=>pos[d][0]),y:nodes.map(d=>pos[d][1]),text:nodes,textposition:'top center',textfont:{size:10,color:t.ink2},
+        marker:{size:14,color:nodes.map(d=>t.ramp[lvl[d]??0]),line:{color:t.surface,width:1.5}},customdata:nodes.map(d=>`${d}<br>Nivel ${lvl[d]??0} · ${deg[d]} vínculos`),hovertemplate:'%{customdata}<extra></extra>',showlegend:false});
+      plot('ch-net',tr,ln);
+    }
+    const top = E.filter(e=>e.period===pe).sort((a,b)=>b.shared_patients-a.shared_patients).slice(0,25);
+    document.getElementById('tbl-edges').innerHTML = '<thead><tr><th>Médico A</th><th>Médico B</th><th class="n">Compartidos</th><th class="n">Jaccard</th><th>Mismo peer group</th></tr></thead><tbody>' +
+      top.map(e=>`<tr><td class="mono">${e.doctor_a}</td><td class="mono">${e.doctor_b}</td><td class="n">${e.shared_patients}</td><td class="n">${e.jaccard.toFixed(3)}</td><td>${e.same_peer_group?'sí':'no'}</td></tr>`).join('')+'</tbody>';
+    const gm = S.filter(r=>r.period===pe).sort((a,b)=>b.graph_risk-a.graph_risk).slice(0,25);
+    document.getElementById('tbl-graph').innerHTML = '<thead><tr><th>Médico</th><th class="n">GraphRisk</th><th class="n">Compartidos</th><th class="n">Simultáneas</th><th>Vínculo más fuerte</th></tr></thead><tbody>' +
+      gm.map(r=>`<tr class="click" data-doc="${r.doctor_id}"><td class="mono">${r.doctor_id}</td><td class="n">${Math.round(r.graph_risk)}</td><td class="n">${pct(r.shared_patient_ratio)}</td><td class="n">${r.simultaneous_encounters||0}</td><td class="mono">${r.strongest_link||'—'}</td></tr>`).join('')+'</tbody>';
+    document.querySelectorAll('#tbl-graph tr.click').forEach(tr=>tr.addEventListener('click',()=>openDoctor(tr.dataset.doc)));
+  }
+  document.getElementById('g-period').addEventListener('change',renderNet); document.getElementById('g-min').addEventListener('input',renderNet);
+
+  // ---------------- Ficha ----------------
+  const dsel = document.getElementById('d-doc');
+  dsel.innerHTML = D.map(r=>`<option value="${r.doctor_id}">${r.doctor_id} · ${Math.round(r.doctor_risk_score)} · N${r.doctor_risk_level} · ${esc(r.peer_group)}</option>`).join('');
+  function renderDoctor(){
+    const t = T(); const doc = dsel.value; const d = D.find(r=>r.doctor_id===doc); const sp = S.filter(r=>r.doctor_id===doc).sort((a,b)=>a.period.localeCompare(b.period));
+    const psel = document.getElementById('d-period'); const cur = psel.value;
+    psel.innerHTML = sp.map(r=>`<option value="${r.period}">${r.period}</option>`).join(''); psel.value = sp.some(r=>r.period===cur)?cur:d.worst_period;
+    const pr = sp.find(r=>r.period===psel.value);
+    document.getElementById('d-kpis').innerHTML = [
+      ['Score consolidado', Math.round(d.doctor_risk_score), 'máx(0,75·peor + 0,25·promedio, último)'], ['Nivel', d.doctor_risk_level+' · '+d.doctor_risk_level_label, ''],
+      ['Score '+pr.period, Math.round(pr.risk_score), pr.escalated_by?('escalado por '+pr.escalated_by):'sin escalamiento'],
+      ['Pagadas / ociosas (h)', pr.paid_hours.toFixed(0)+' / '+pr.idle_hours.toFixed(1), pct(pr.idle_hours_ratio)+' sin actividad'],
+      ['Pac/h vs esperado', pr.patients_per_hour.toFixed(2)+' / '+pr.expected_rate.toFixed(2), pct(pr.performance_ratio)+' del esperado'],
+      ['Costo por paciente', clp(pr.cost_per_patient), 'peer group n='+pr.peer_size]
+    ].map(k=>`<div class="kpi"><div class="l">${k[0]}</div><div class="v" style="white-space:normal">${k[1]}</div><div class="h">${k[2]}</div></div>`).join('');
+    document.getElementById('d-explain').textContent = pr.explanation;
+    const ld = layout('Dimensiones del riesgo · '+pr.period); ld.xaxis.range=[0,125]; ld.xaxis.title.text='Score de dimensión (0-100)'; ld.yaxis.autorange='reversed'; ld.yaxis.showgrid=false; ld.margin.l=10;
+    plot('ch-dims',[{type:'bar',orientation:'h',x:DIMS.map(k=>pr[k]),y:DIMS.map(k=>DL[k]),marker:{color:t.accent},width:.55,text:DIMS.map(k=>Math.round(pr[k])),textposition:'outside',textfont:{color:t.ink2},hovertemplate:'%{y}<br>%{x:.0f}/100<extra></extra>'}],ld);
+    const w = W.filter(r=>r.doctor_id===doc).sort((a,b)=>a.week.localeCompare(b.week)); const al = w.filter(r=>r.cusum_alarm);
+    const lw = layout('Rendimiento semanal vs histórico propio',{hovermode:'x unified'}); lw.yaxis.title.text='Pacientes por hora'; lw.yaxis.rangemode='tozero';
+    const tw = [{type:'scatter',mode:'lines',name:'Línea base propia',x:w.map(r=>r.week),y:w.map(r=>r.baseline_pph),line:{color:t.muted,width:1.5}},
+      {type:'scatter',mode:'lines+markers',name:'Pacientes/hora (semana)',x:w.map(r=>r.week),y:w.map(r=>r.pph),line:{color:t.accent,width:2},marker:{size:7,line:{color:t.surface,width:2}}},
+      {type:'scatter',mode:'lines',name:'EWMA',x:w.map(r=>r.week),y:w.map(r=>r.ewma_pph),line:{color:t.s2,width:2}}];
+    if(al.length) tw.push({type:'scatter',mode:'markers',name:'Alarma CUSUM',x:al.map(r=>r.week),y:al.map(r=>r.pph),marker:{symbol:'diamond',size:11,color:t.s3,line:{color:t.surface,width:2}}});
+    plot('ch-week',tw,lw);
+    document.getElementById('tbl-traj').innerHTML = '<thead><tr><th>Período</th><th class="n">Score</th><th>Nivel</th><th>Escalado por</th>'+DIMS.map(k=>`<th class="n">${esc(DL[k].split(' (')[0].split(' /')[0])}</th>`).join('')+'<th class="n">Horas pagadas</th><th class="n">Ociosas</th><th class="n">Pac/h</th><th class="n">Costo/pac</th><th class="n">Cambio vs hist.</th></tr></thead><tbody>' +
+      sp.map(r=>`<tr><td class="mono">${r.period}</td><td class="n">${Math.round(r.risk_score)}</td><td>${lvlTag(r.risk_level)}</td><td class="mono">${esc(r.escalated_by||'—')}</td>${DIMS.map(k=>`<td class="n">${Math.round(r[k])}</td>`).join('')}<td class="n">${r.paid_hours.toFixed(0)}</td><td class="n">${pct(r.idle_hours_ratio)}</td><td class="n">${r.patients_per_hour.toFixed(2)}</td><td class="n">${clp(r.cost_per_patient)}</td><td class="n">${pct(r.rel_change)}</td></tr>`).join('')+'</tbody>';
+    const da = A.filter(a=>a.doctor_id===doc).sort((a,b)=>a.period.localeCompare(b.period)||a.rule.localeCompare(b.rule));
+    document.getElementById('tbl-alerts').innerHTML = da.length ? '<thead><tr><th>Período</th><th>Regla</th><th>Detalle</th><th class="n">Intensidad</th></tr></thead><tbody>'+da.map(a=>`<tr><td class="mono">${a.period}</td><td class="mono">${a.rule}</td><td class="wrap">${esc(a.detail)}</td><td class="n">${a.intensity.toFixed(2)}</td></tr>`).join('')+'</tbody>' : '<tbody><tr><td class="note">Sin reglas activadas.</td></tr></tbody>';
+  }
+  dsel.addEventListener('change',()=>{document.getElementById('d-period').value='';renderDoctor();});
+  document.getElementById('d-period').addEventListener('change',renderDoctor);
+  function openDoctor(id){ dsel.value=id; document.getElementById('d-period').value=''; show('ficha'); renderDoctor(); window.scrollTo({top:0,behavior:'smooth'}); }
+
+  // ---------------- Método ----------------
+  document.getElementById('tbl-weights').innerHTML = '<thead><tr><th>Dimensión</th><th class="n">Peso</th><th>Cómo se construye</th></tr></thead><tbody>'+[
+    ['contract_risk','Conciliación contratado ↔ pagado y reglas R07, R08'],['activity_risk','Reglas R01, R03–R06, R09–R13 (horas sin actividad e integridad del registro)'],
+    ['productivity_risk','Regla R02 y change detection (caída sostenida vs histórico propio)'],['peer_risk','Desviación robusta (MAD) en la dirección de riesgo frente al peer group'],
+    ['anomaly_risk','Isolation Forest 0,6 + LOF 0,4 sobre z-scores intra-grupo'],['graph_risk','Pacientes compartidos, atenciones simultáneas, concentración de cartera, visitas implausibles']
+  ].map(([k,h])=>`<tr><td>${esc(DL[k])}</td><td class="n">${DATA.weights[k].toFixed(2)}</td><td class="wrap">${h}</td></tr>`).join('')+'</tbody>';
+  document.getElementById('tbl-levels').innerHTML = '<thead><tr><th>Nivel</th><th>Score</th><th>Etiqueta</th><th>Acción sugerida</th></tr></thead><tbody>'+[
+    [0,'0–20','Sin acción.'],[1,'20–40','Monitoreo en el próximo ciclo de pago.'],[2,'40–60','Revisión administrativa de agenda, contrato y registro.'],[3,'60–75','Revisión de pagos y solicitud de descargos al profesional.'],[4,'75–100','Auditoría formal con reconstrucción de actividad y cruce de fuentes.']
+  ].map(([l,s,a])=>`<tr><td>${lvlTag(l)}</td><td class="mono">${s}</td><td>${esc(LV[l])}</td><td class="wrap">${a}</td></tr>`).join('')+'</tbody>';
+
+  // ---------------- Tabs ----------------
+  const rendered = {};
+  const renderers = {resumen:renderSummary,metricas:renderMetrics,red:renderNet,ficha:renderDoctor,informe:()=>{const f=document.getElementById('report-frame'); if(!f.srcdoc) f.srcdoc=REPORT_HTML;},metodo:()=>{}};
+  function show(v){
+    document.querySelectorAll('nav.tabs button').forEach(b=>b.setAttribute('aria-selected', b.dataset.view===v?'true':'false'));
+    document.querySelectorAll('section.view').forEach(s=>s.classList.toggle('active', s.id==='view-'+v));
+    renderers[v](); rendered[v]=true;
+    document.querySelectorAll('#view-'+v+' .chart').forEach(el=>{ if(el.data) Plotly.Plots.resize(el); });
+  }
+  document.querySelectorAll('nav.tabs button').forEach(b=>b.addEventListener('click',()=>show(b.dataset.view)));
+  show('resumen');
+  const mq = window.matchMedia('(prefers-color-scheme: dark)');
+  const rerender = ()=>{ Object.keys(rendered).forEach(v=>renderers[v]()); };
+  mq.addEventListener && mq.addEventListener('change', rerender);
+  new MutationObserver(rerender).observe(document.documentElement,{attributes:true,attributeFilter:['data-theme']});
+})();
+</script>

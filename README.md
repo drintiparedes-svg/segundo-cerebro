@@ -56,6 +56,29 @@ bundle = build_report(res, DEFAULT_CONFIG, min_level=3, top_n=20)
 open("informe.html", "w").write(bundle.html)
 ```
 
+## Despliegue
+
+| Modalidad | Qué ofrece | Cómo |
+|---|---|---|
+| Contenedor (Render, Railway, Cloud Run, servidor propio) | Tablero interactivo completo | `docker build -t payment-integrity . && docker run -p 8501:8501 payment-integrity` |
+| Streamlit Community Cloud | Tablero interactivo completo desde GitHub | Importar el repositorio con archivo principal `app/dashboard.py` |
+| Vercel | **Vista estática de demostración** (`web/`): resultados precalculados, gráficos, red e informe. Vercel no ejecuta servidores persistentes como Streamlit, por lo que la carga de archivos y la ejecución del modelo no están disponibles ahí | Importar el repositorio en Vercel; `vercel.json` publica la carpeta `web`. O bien `npx vercel --prod` desde la raíz |
+
+Regenerar la vista estática tras cambiar el modelo:
+
+```bash
+python scripts/export_static_data.py web && python scripts/build_static_site.py
+```
+
+Con datos reales, la recomendación es el contenedor dentro de la infraestructura institucional.
+
+## Manual de uso
+
+`docs/MANUAL_DE_USO.md` documenta instalación, flujo de uso por sección, contrato de datos, control de
+calidad, diccionario completo de indicadores y métricas con fórmulas, las reglas R01–R13 y G01 con umbral,
+saturación, qué revisar en auditoría y causas legítimas a descartar, la fórmula del score, niveles y
+acciones, calibración con data real, ciclo de auditoría y gobernanza.
+
 ## Arquitectura (cinco capas)
 
 ```
@@ -317,8 +340,12 @@ payment_integrity/
   __main__.py          CLI
   reporting.py         informe de hallazgos (HTML, Markdown, CSV)
 app/
-  dashboard.py         tablero Streamlit (carga, métricas, ficha, reportería)
+  dashboard.py         tablero Streamlit (carga, métricas, ficha, reportería, casos)
   charts.py            gráficos Plotly con paleta validada
+web/                   vista estática de demostración (Vercel); template.html + data.json + index.html
+scripts/               export_static_data.py, build_static_site.py
+docs/MANUAL_DE_USO.md  manual de uso y reglas de indicadores y métricas
+Dockerfile, vercel.json
 tests/test_pipeline.py, tests/test_app.py, tests/test_extensions.py
 requirements.txt
 ```
