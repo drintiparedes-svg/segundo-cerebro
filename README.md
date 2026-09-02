@@ -5,10 +5,11 @@ Identifica *riesgo de pago indebido* (no culpabilidad) cruzando contrato, horas 
 actividad clínica efectiva y comportamiento esperado del profesional, y entrega al auditor
 un score explicable con la evidencia que lo sustenta.
 
-> Estado: **MVP validado sobre data proxy sintética.** El repositorio no contenía data, por lo
-> que se construyó un generador que replica el modelo de datos del diseño (contrato, agenda,
-> atenciones, sesiones, pagos) con cinco escenarios de riesgo inyectados. El pipeline está
-> listo para recibir data real con el contrato de tablas descrito abajo.
+> Estado: **sistema completo validado sobre data proxy sintética.** El repositorio no contenía
+> data, por lo que se construyó un generador que replica el modelo de datos del diseño (contrato,
+> agenda, atenciones, sesiones, pagos) con seis escenarios de riesgo inyectados, incluida una red
+> de facturación entre dos médicos. El pipeline, el tablero y la gestión de casos están listos
+> para recibir data real con el contrato de tablas descrito abajo.
 
 ## Uso rápido
 
@@ -38,11 +39,12 @@ streamlit run app/dashboard.py
 
 | Sección | Contenido |
 |---|---|
-| 1 · Carga de datos | Subida de los seis CSV con validación del contrato de datos, vista previa, data de demostración sintética, ejecución del modelo. Parámetros clave y pesos ajustables en la barra lateral. |
+| 1 · Carga de datos | Subida de las seis tablas en CSV o Excel con validación del contrato de datos, **control de calidad** (errores bloqueantes, advertencias, cobertura), vista previa, data de demostración, ejecución del modelo e historial de corridas. Parámetros clave y pesos ajustables en la barra lateral. |
 | 2 · Resumen ejecutivo | KPIs (pago total, monto sin respaldo, monto sobre contrato, médicos nivel ≥ 3), distribución por nivel, histograma de scores, top N priorizados, evolución mensual, ranking consolidado. |
-| 3 · Métricas | Filtros por peer group, período y nivel. Rendimiento vs costo por paciente, boxplots por peer group con z-scores, frecuencia y heatmap de reglas, anomalías IF/LOF, conciliación contractual. |
-| 4 · Ficha por médico | Score y nivel, explicación accionable, dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas vs con actividad por día, trayectoria mensual y alertas. |
-| 5 · Reportería | Informe filtrable por nivel mínimo, top N y peer group. Exporta HTML autocontenido imprimible, Markdown, CSV de hallazgos para Sheets/Excel y ZIP con todas las tablas y la configuración usada. |
+| 3 · Métricas | Filtros por peer group, período y nivel. Rendimiento vs costo por paciente, boxplots por peer group con z-scores, frecuencia y heatmap de reglas, anomalías IF/LOF, conciliación contractual y **grafo de relaciones** médico–médico con vínculos más fuertes y coincidencias temporales. |
+| 4 · Ficha por médico | Score y nivel, explicación accionable, seis dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas vs con actividad, **señales de grafo y vecindario del médico**, trayectoria mensual y alertas. |
+| 5 · Reportería | Informe filtrable por nivel mínimo, top N y peer group, con gráficos SVG autocontenidos, hallazgos por médico, relaciones y anexo metodológico. Exporta HTML imprimible, Markdown, **Excel de cinco hojas**, CSV de hallazgos y ZIP con todas las tablas y la configuración usada. |
+| 6 · Gestión de casos | Cola de casos por nivel, registro de decisiones del auditor (estado, resultado, comentario) con historial en SQLite, carga masiva de auditorías cerradas y **entrenamiento de la capa supervisada** con AUC de validación cruzada, importancia de variables y probabilidad por médico. |
 
 Cada gráfico tiene su vista de tabla equivalente. La paleta (rampa ordinal azul para niveles y tres
 colores categóricos) fue validada para daltonismo y contraste. El módulo de reportería vive en
@@ -72,7 +74,7 @@ Contrato · Horas · Pagos · Agenda · Atenciones · Registro clínico · Sesio
 ### Fórmula del Risk Score
 
 ```
-RiskScore = 0.20·ContractRisk + 0.25·ActivityRisk + 0.20·ProductivityRisk + 0.20·PeerRisk + 0.15·AnomalyRisk
+RiskScore = 0.18·ContractRisk + 0.22·ActivityRisk + 0.18·ProductivityRisk + 0.18·PeerRisk + 0.14·AnomalyRisk + 0.10·GraphRisk
 ```
 
 | Dimensión | Fuente |
@@ -82,9 +84,11 @@ RiskScore = 0.20·ContractRisk + 0.25·ActivityRisk + 0.20·ProductivityRisk + 0
 | ProductivityRisk | Regla R02 y Change Detection (caída sostenida vs histórico propio) |
 | PeerRisk | Desviación robusta en la dirección de riesgo frente al peer group |
 | AnomalyRisk | Isolation Forest (0.6) + LOF (0.4), normalizados por mediana + k·MAD |
+| GraphRisk | Pacientes compartidos sobre lo habitual del grupo, atenciones simultáneas del mismo paciente con dos médicos, concentración de cartera y visitas implausibles |
 
 **Escalamiento por reglas críticas.** Si una regla marcada como crítica (R01, R03, R04, R05, R07,
-R08, R09, R12) alcanza intensidad ≥ 0,5, el score se eleva al menos al piso de nivel 3
+R08, R09, R12) alcanza intensidad ≥ 0,5, o el grafo detecta 3 o más atenciones al mismo paciente
+coincidentes en el tiempo con otro médico (G01), el score se eleva al menos al piso de nivel 3
 (60) y sobre el piso conserva el orden del puntaje ponderado. Evita que un caso con
 evidencia directa de pago indebido se diluya en el promedio.
 
@@ -125,6 +129,40 @@ Intensidad = 0 en el umbral, 1 en la saturación. Todos los umbrales viven en
 `payment_integrity/config.py` (`RuleThresholds`) y deben recalibrarse con data real.
 R02 no es crítica deliberadamente: el bajo rendimiento por sí solo admite explicaciones
 legítimas (bloqueos de agenda, complejidad, demanda, tareas administrativas).
+
+## Capa de grafos (relaciones médico–paciente–tiempo)
+
+Se construye por mes un grafo bipartito médico–paciente ponderado por atenciones y su proyección
+médico–médico (arista = pacientes en común, con índice de Jaccard). Sobre él se calculan, por médico:
+
+| Señal | Qué detecta | Cómo se mide |
+|---|---|---|
+| Pacientes compartidos | Pool de pacientes que circula entre médicos | Fracción de la cartera compartida vs el doble de la mediana del grupo (mínimo 25 %) |
+| Atenciones simultáneas | El mismo paciente atendido por dos médicos en el mismo instante | Cruce temporal de atenciones por paciente; ≥ 3 escala el caso (G01) |
+| Concentración de cartera | Pocos pacientes concentran la actividad | Atenciones por paciente en múltiplos de la mediana del grupo, HHI y participación del top 5 |
+| Visitas implausibles | Pacientes con 4 o más atenciones en el mes | Fracción de la cartera con esa frecuencia |
+| Comunidades | Grupos de médicos que comparten pacientes | Modularidad (greedy) sobre aristas con 3 o más pacientes en común |
+
+La explicación de grafo se incorpora a la narrativa del médico, por ejemplo: "43 atenciones a 25
+pacientes coinciden en el tiempo con atenciones de otro médico al mismo paciente. Comparte 100 % de
+sus pacientes con otros médicos (mediana del grupo 12 %); vínculo más fuerte con MED0057 (40
+pacientes en común, Jaccard 1,00). Pertenece a una comunidad de 2 médicos que comparten un pool".
+
+## Gestión de casos y capa supervisada
+
+`casework.py` mantiene en SQLite las decisiones del auditor por médico-período (estados PENDIENTE,
+EN_REVISION, CERRADO; resultados NORMAL, ERROR_ADMINISTRATIVO, PAGO_INDEBIDO_CONFIRMADO, ABUSO,
+FRAUDE_CONFIRMADO), su historial completo y el registro de cada corrida con la configuración usada.
+
+Los casos cerrados alimentan `layers/supervised.py`: un gradient boosting (tolera valores ausentes)
+que se entrena cuando existen al menos 20 casos con 5 por clase, reporta AUC y precisión media por
+validación cruzada estratificada e importancia por permutación, y agrega `supervised_prob` a cada
+médico-período. La probabilidad complementa el score; no lo reemplaza.
+
+```bash
+python -m payment_integrity --input data/real --labels auditorias.csv   # importa auditorías y entrena
+python -m payment_integrity --no-db                                       # sin base de casos
+```
 
 ## Modelo de datos (contrato de entrada)
 
@@ -200,7 +238,7 @@ Ejemplo de explicación entregada al auditor:
 ## Validación sobre data proxy
 
 Data sintética: 60 médicos, 4 especialidades × 2 modalidades, 26 semanas, 9 médicos (15 %)
-con escenario inyectado. La columna `doctors.scenario` **solo** se usa para evaluar; nunca
+con escenario inyectado, dos de ellos formando una red de facturación. La columna `doctors.scenario` **solo** se usa para evaluar; nunca
 como feature.
 
 | Escenario inyectado | Qué simula | Capas que lo capturan |
@@ -210,13 +248,14 @@ como feature.
 | `hours_overbilling` | Horas pagadas > contratadas en 40 % de los días + pagos duplicados | Capa 1, R07, R08 |
 | `ghost_records` | 28 % sin registro clínico, 22 % consultas de 1–3 min, paciente repetido | R06, R11, R12, R13, anomalía |
 | `off_schedule` | Atenciones fuera de horario, solapadas y sin sesión activa | R03, R04, R05, anomalía |
+| `network_billing` | Dos médicos comparten un pool de 40 pacientes con visitas frecuentes y el mismo paciente aparece atendido por ambos en el mismo instante | Grafo (G01, compartidos, concentración), anomalía |
 
 Resultado con la configuración por defecto (`output/validation.json`):
 
 | Métrica | Valor |
 |---|---|
 | Precision@9 / Recall@9 (ranking por médico) | 1,00 / 1,00 |
-| Inyectados en nivel ≥ 3 | 8 de 9 |
+| Inyectados en nivel ≥ 3 | 8 de 9 (la red de facturación en posiciones 2 y 4) |
 | Normales en nivel ≥ 3 / ≥ 2 / ≥ 1 | 0 % / 0 % / 5,9 % |
 | Score medio inyectados vs normales | 77,3 vs 9,2 |
 
@@ -251,8 +290,10 @@ indebido, pero el reporte lo entrega con la caída cuantificada y la alarma CUSU
   ampliar el grupo (p. ej. sin distinguir turno) antes que comparar contra 3 colegas.
 - **No es un modelo de fraude**: identifica riesgo de pago indebido y prioriza auditorías. Todo
   caso nivel 3–4 requiere revisión humana antes de cualquier acción laboral o administrativa.
-- **Graph analytics y modelo supervisado** (capas D y F del diseño) quedan fuera del MVP a la
-  espera de prestaciones individuales y de una base de auditorías cerradas.
+- **Capa supervisada**: inactiva hasta contar con 20 auditorías cerradas y 5 por clase; con
+  muestras pequeñas la probabilidad es orientativa y así lo declara el tablero.
+- **Grafo**: la detección de atenciones simultáneas depende de la calidad de los timestamps de inicio
+  y término; con registros de hora imprecisos conviene subir la tolerancia en `GraphConfig`.
 
 ## Estructura del repositorio
 
@@ -267,6 +308,10 @@ payment_integrity/
     peer.py            capa 3
     anomaly.py         capa 4
     change.py          capa E
+    graph.py           capa F (grafo médico–paciente)
+    supervised.py      capa D (gradient boosting con auditorías cerradas)
+  quality.py           control de calidad de datos de entrada
+  casework.py          gestión de casos, etiquetas e historial de corridas (SQLite)
   scoring.py           capa 5 + narrativa + consolidación por médico
   pipeline.py          orquestación, validación, exportación, reporte
   __main__.py          CLI
@@ -274,6 +319,6 @@ payment_integrity/
 app/
   dashboard.py         tablero Streamlit (carga, métricas, ficha, reportería)
   charts.py            gráficos Plotly con paleta validada
-tests/test_pipeline.py, tests/test_app.py
+tests/test_pipeline.py, tests/test_app.py, tests/test_extensions.py
 requirements.txt
 ```

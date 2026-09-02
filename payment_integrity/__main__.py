@@ -27,6 +27,9 @@ def main() -> None:
     ap.add_argument("--output", default="output", help="carpeta de salida")
     ap.add_argument("--synthetic-out", help="además, exporta la data sintética generada a esta carpeta")
     ap.add_argument("--top", type=int, default=10)
+    ap.add_argument("--labels", help="CSV de auditorías cerradas (doctor_id, period, outcome) para la capa supervisada")
+    ap.add_argument("--db", default="data/audit/cases.db", help="SQLite de gestión de casos (registra la corrida y toma etiquetas)")
+    ap.add_argument("--no-db", action="store_true", help="no registrar la corrida ni leer etiquetas del SQLite")
     args = ap.parse_args()
 
     data = load_inputs(Path(args.input)) if args.input else None
@@ -37,7 +40,26 @@ def main() -> None:
             v.to_csv(Path(args.synthetic_out) / f"{k}.csv", index=False)
         data = ds.as_dict()
 
-    res = run_pipeline(data=data, output_dir=args.output)
+    labels = None
+    store = None
+    if not args.no_db:
+        from .casework import CaseStore
+        store = CaseStore(args.db)
+        if args.labels:
+            store.import_labels(pd.read_csv(args.labels))
+        labels = store.labels()
+        labels = labels if len(labels) else None
+    elif args.labels:
+        from .casework import POSITIVE_OUTCOMES
+        labels = pd.read_csv(args.labels)
+        labels["label"] = labels["outcome"].isin(POSITIVE_OUTCOMES).astype(int)
+
+    res = run_pipeline(data=data, output_dir=args.output, labels=labels)
+    if store is not None:
+        run_id = store.record_run(res, DEFAULT_CONFIG, source=args.input or "sintética")
+        print(f"Corrida registrada: {run_id}")
+    if res.supervised is not None:
+        print(f"Capa supervisada: {res.supervised.message}")
     d = res.doctor_scores
     cols = ["doctor_id", "peer_group", "doctor_risk_score", "doctor_risk_level_label", "worst_period", "amount_at_risk", "idle_amount"]
     print(d[cols].head(args.top).to_string(index=False))

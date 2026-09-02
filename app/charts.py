@@ -199,3 +199,61 @@ def weekly_activity(day: pd.DataFrame) -> go.Figure:
     fig.update_layout(barmode="overlay", bargap=0.25)
     fig.update_yaxes(title="Horas por semana")
     return _layout(fig, hovermode="x unified", height=300, title="Horas pagadas vs horas con actividad (por semana)")
+
+
+# --------------------------------------------------------------------------- grafo
+def network_figure(nodes: pd.DataFrame, edges: pd.DataFrame, focus: str | None = None, title: str = "Red médico–médico",
+                   level_of: dict | None = None, height: int = 480, seed: int = 7) -> go.Figure:
+    """Proyección médico–médico: arista = pacientes compartidos. Nodo coloreado por nivel de riesgo
+    (rampa ordinal); el médico en foco se resalta con anillo."""
+    import networkx as nx
+    G = nx.Graph()
+    G.add_nodes_from(nodes["doctor_id"].tolist())
+    for e in edges.itertuples():
+        G.add_edge(e.doctor_a, e.doctor_b, w=float(e.shared_patients))
+    if G.number_of_nodes() == 0:
+        return _layout(go.Figure(), height=height, title=title)
+    pos = nx.spring_layout(G, weight=None, seed=seed, k=2.0 / max(1, G.number_of_nodes()) ** 0.5, iterations=200)
+    fig = go.Figure()
+    wmax = max([d["w"] for _, _, d in G.edges(data=True)] + [1.0])
+    for a, b, d in G.edges(data=True):
+        x0, y0 = pos[a]; x1, y1 = pos[b]
+        fig.add_trace(go.Scatter(x=[x0, x1], y=[y0, y1], mode="lines", hoverinfo="skip", showlegend=False,
+                                 line=dict(color=AXIS, width=1 + 5 * d["w"] / wmax)))
+        fig.add_trace(go.Scatter(x=[(x0 + x1) / 2], y=[(y0 + y1) / 2], mode="markers", showlegend=False,
+                                 marker=dict(size=14, color="rgba(0,0,0,0)"),
+                                 hovertemplate=f"{a} – {b}<br>{int(d['w'])} pacientes compartidos<extra></extra>"))
+    level_of = level_of or {}
+    xs, ys, cols, texts, sizes, lines = [], [], [], [], [], []
+    for n in G.nodes:
+        xs.append(pos[n][0]); ys.append(pos[n][1])
+        lvl = int(level_of.get(n, 0))
+        cols.append(LEVEL_RAMP[lvl]); texts.append(f"{n}<br>Nivel {lvl} · {G.degree(n)} vínculos")
+        sizes.append(22 if n == focus else 14); lines.append(dict(color=S2 if n == focus else SURFACE, width=3 if n == focus else 1.5))
+    fig.add_trace(go.Scatter(x=xs, y=ys, mode="markers+text", text=list(G.nodes), textposition="top center",
+                             textfont=dict(size=10, color=INK2), showlegend=False,
+                             marker=dict(size=sizes, color=cols, line=dict(color=[l["color"] for l in lines], width=[l["width"] for l in lines])),
+                             hovertemplate="%{customdata}<extra></extra>", customdata=texts))
+    fig.update_xaxes(visible=False); fig.update_yaxes(visible=False, showgrid=False)
+    return _layout(fig, height=height, title=title)
+
+
+def graph_metric_bars(row: pd.Series) -> go.Figure:
+    labels = ["Pacientes compartidos", "Concentración de cartera", "Atenciones simultáneas", "Visitas implausibles"]
+    vals = [100 * float(row.get(k, 0) or 0) for k in ("r_shared", "r_concentration", "r_simultaneous", "r_frequent")]
+    fig = go.Figure(go.Bar(x=vals, y=labels, orientation="h", marker=dict(color=S1, line=dict(width=0)), width=0.55,
+                           text=[f"{v:.0f}" for v in vals], textposition="outside", textfont=dict(color=INK2),
+                           hovertemplate="%{y}<br>%{x:.0f}/100<extra></extra>"))
+    fig.update_xaxes(range=[0, 125], title="Señal de grafo (0-100)")
+    fig.update_yaxes(autorange="reversed", showgrid=False)
+    return _layout(fig, height=230, title="Señales de la capa de grafos")
+
+
+def importance_bars(imp: pd.DataFrame, n: int = 12) -> go.Figure:
+    d = imp.head(n).iloc[::-1]
+    fig = go.Figure(go.Bar(x=d["importance"], y=d["feature"], orientation="h", marker=dict(color=S1, line=dict(width=0)), width=0.6,
+                           error_x=dict(type="data", array=d["std"], color=MUTED, thickness=1),
+                           hovertemplate="%{y}<br>Δ AUC %{x:.3f}<extra></extra>"))
+    fig.update_xaxes(title="Importancia por permutación (Δ AUC)")
+    fig.update_yaxes(showgrid=False)
+    return _layout(fig, height=max(300, 22 * n + 80), title="Variables más informativas del modelo supervisado")

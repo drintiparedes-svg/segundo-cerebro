@@ -14,26 +14,40 @@ import pandas as pd
 from .config import ScoringConfig
 from .layers.rules import RULES
 
-DIMENSIONS = ("contract_risk", "activity_risk", "productivity_risk", "peer_risk", "anomaly_risk")
+DIMENSIONS = ("contract_risk", "activity_risk", "productivity_risk", "peer_risk", "anomaly_risk", "graph_risk")
 DIMENSION_LABELS = {
     "contract_risk": "Inconsistencia contractual",
     "activity_risk": "Horas sin actividad / integridad del registro",
     "productivity_risk": "Rendimiento anómalo",
     "peer_risk": "Diferencia frente a pares",
     "anomaly_risk": "Anomaly detection (IF + LOF)",
+    "graph_risk": "Relaciones médico–paciente (grafo)",
 }
+
+
+GRAPH_COLS = ["shared_patient_ratio", "shared_patient_ratio_peer_median", "patient_hhi", "top5_patient_share",
+              "encounters_per_patient", "frequent_patients", "shared_patients", "n_linked_doctors", "strongest_link",
+              "strongest_link_shared", "strongest_link_jaccard", "simultaneous_encounters", "simultaneous_patients",
+              "community", "community_size", "graph_risk", "graph_explanation"]
 
 
 def assemble(period: pd.DataFrame, recon: pd.DataFrame, rule_matrix: pd.DataFrame,
              rule_dims: pd.DataFrame, peer: pd.DataFrame, anomaly: pd.DataFrame,
-             change: pd.DataFrame, cfg: ScoringConfig) -> pd.DataFrame:
+             change: pd.DataFrame, cfg: ScoringConfig, graph: pd.DataFrame | None = None) -> pd.DataFrame:
     key = ["doctor_id", "period"]
     df = period.merge(recon[key + ["amount_at_risk", "idle_amount", "contract_intensity", "status"]], on=key)
     df = df.merge(rule_matrix, on=key).merge(rule_dims, on=key)
     df = df.merge(peer.drop(columns=["peer_group"]), on=key, how="left")
     df = df.merge(anomaly, on=key, how="left")
     df = df.merge(change[key + ["baseline_pph", "ewma_pph", "rel_change", "cusum_alarm", "change_risk"]],
-                  on=key, how="left").copy()
+                  on=key, how="left")
+    if graph is not None and len(graph):
+        df = df.merge(graph[key + [c for c in GRAPH_COLS if c in graph.columns]], on=key, how="left")
+    else:
+        df["graph_risk"] = 0.0
+        df["graph_explanation"] = ""
+        df["simultaneous_encounters"] = 0
+    df = df.copy()
 
     # --- dimensiones -------------------------------------------------------------
     df["contract_risk"] = np.maximum(df["contract_risk_rules"], 100 * df["contract_intensity"]).clip(0, 100)
@@ -44,6 +58,9 @@ def assemble(period: pd.DataFrame, recon: pd.DataFrame, rule_matrix: pd.DataFram
     ).clip(0, 100)
     df["peer_risk"] = df["peer_risk"].fillna(0).clip(0, 100)
     df["anomaly_risk"] = df["anomaly_risk"].fillna(0).clip(0, 100)
+    df["graph_risk"] = df["graph_risk"].fillna(0).clip(0, 100)
+    df["graph_explanation"] = df["graph_explanation"].fillna("")
+    df["simultaneous_encounters"] = df["simultaneous_encounters"].fillna(0)
 
     w = cfg.weights
     df["weighted_score"] = sum(df[d] * w[d] for d in DIMENSIONS).round(1)
@@ -51,6 +68,7 @@ def assemble(period: pd.DataFrame, recon: pd.DataFrame, rule_matrix: pd.DataFram
     # escalamiento por reglas críticas (evidencia directa de pago indebido)
     crit = [r for r in RULES if r.critical]
     esc = pd.DataFrame({r.code: df[f"{r.code}_intensity"].fillna(0) >= cfg.critical_intensity for r in crit})
+    esc["G01"] = df["simultaneous_encounters"] >= cfg.graph_simultaneous_critical   # mismo paciente, dos médicos, mismo instante
     df["escalated_by"] = esc.apply(lambda row: ", ".join(c for c in esc.columns if row[c]), axis=1)
     # sobre el piso, el score conserva el orden del puntaje ponderado: piso + ponderado·(100-piso)/100
     escalated = cfg.critical_floor + df["weighted_score"] * (100 - cfg.critical_floor) / 100
@@ -120,6 +138,10 @@ def _explain(row: pd.Series) -> str:
     fired = [r for r in RULES if row.get(f"{r.code}_flag", False)]
     if fired:
         parts.append("Reglas activadas: " + ", ".join(f"{r.code} {r.name.lower()}" for r in fired) + ".")
+
+    # grafo
+    if row.get("graph_explanation"):
+        parts.append(str(row["graph_explanation"]))
 
     # anomalía
     if row.get("anomaly_risk", 0) >= 50:

@@ -12,6 +12,8 @@ productivity_collapse  historial normal y caída sostenida del rendimiento en la
 hours_overbilling      horas pagadas > contratadas de forma recurrente + pagos duplicados
 ghost_records          atenciones sin registro clínico, duraciones improbables, paciente repetido
 off_schedule           atenciones fuera del horario contratado, solapadas y sin sesión activa
+network_billing        dos médicos comparten un pool reducido de pacientes con visitas frecuentes y
+                       el mismo paciente aparece atendido por ambos en el mismo instante
 """
 from __future__ import annotations
 
@@ -29,6 +31,7 @@ SCENARIOS = (
     "ghost_records",
     "off_schedule",
 )
+NETWORK_SCENARIO = "network_billing"   # siempre se inyecta en pareja
 
 SPECIALTIES = {
     # especialidad: (rendimiento esperado pac/h, duración media min, valor hora CLP)
@@ -89,7 +92,16 @@ def _make_doctors(cfg: SyntheticConfig, rng: np.random.Generator) -> pd.DataFram
 
     n_fraud = max(1, int(round(n * cfg.fraud_fraction)))
     fraud_idx = rng.choice(n, size=n_fraud, replace=False)
-    doctors.loc[fraud_idx, "scenario"] = [SCENARIOS[k % len(SCENARIOS)] for k in range(n_fraud)]
+    if n_fraud >= 4:   # los dos últimos forman la red de facturación; el resto rota por los escenarios individuales
+        solo, net = fraud_idx[:-2], fraud_idx[-2:]
+        doctors.loc[solo, "scenario"] = [SCENARIOS[k % len(SCENARIOS)] for k in range(len(solo))]
+        doctors.loc[net, "scenario"] = NETWORK_SCENARIO
+        # la red comparte especialidad, modalidad y turno para que la comparación con pares sea honesta
+        for col in ("specialty", "modality", "shift", "expected_rate"):
+            doctors.loc[net[1], col] = doctors.loc[net[0], col]
+        doctors["peer_group"] = doctors["specialty"] + " | " + doctors["modality"]
+    else:
+        doctors.loc[fraud_idx, "scenario"] = [SCENARIOS[k % len(SCENARIOS)] for k in range(n_fraud)]
     return doctors
 
 
@@ -107,6 +119,10 @@ def generate(cfg: SyntheticConfig | None = None) -> SyntheticDataset:
 
     contracts, schedule, encounters, sessions, payments = [], [], [], [], []
     appt_seq = enc_seq = pay_seq = 0
+    # la red de facturación comparte días de trabajo y un pool reducido de pacientes
+    net_ids = doctors.loc[doctors["scenario"] == NETWORK_SCENARIO, "doctor_id"].tolist()
+    net_work_days = set(rng.choice(5, size=4, replace=False))
+    net_panel = rng.integers(10_000, 99_999, size=40)
 
     for doc in doctors.itertuples(index=False):
         # patrón semanal estable por médico: trabaja 3-5 días/semana
@@ -115,6 +131,8 @@ def generate(cfg: SyntheticConfig | None = None) -> SyntheticDataset:
         block_start_hour = 8 if doc.shift == "diurno" else 14
         # panel de pacientes propio (permite controles recurrentes legítimos)
         panel = rng.integers(10_000, 99_999, size=400)
+        if doc.scenario == NETWORK_SCENARIO:
+            work_days, panel, contracted_hours = net_work_days, net_panel, 6
 
         for day in days:
             if day.weekday() not in work_days:
@@ -143,7 +161,9 @@ def generate(cfg: SyntheticConfig | None = None) -> SyntheticDataset:
             status = rng.choice(
                 ["atendido", "ausente", "cancelado"], size=n_slots, p=[0.80, 0.13, 0.07]
             )
-            patients = rng.choice(panel, size=n_slots, replace=False)
+            patients = rng.choice(panel, size=min(n_slots, len(panel)), replace=False)
+            if len(patients) < n_slots:
+                patients = np.concatenate([patients, rng.choice(panel, size=n_slots - len(patients))])
             slot_minutes = np.sort(rng.uniform(0, contracted_hours * 60, size=n_slots))
             services = rng.choice(SERVICE_TYPES, size=n_slots, p=[0.55, 0.38, 0.07])
 
@@ -274,6 +294,20 @@ def generate(cfg: SyntheticConfig | None = None) -> SyntheticDataset:
                      "paid_hours": pay_hours, "hourly_rate": doc.hourly_rate,
                      "amount": pay_hours * doc.hourly_rate}
                 )
+
+    # ---- red de facturación: el mismo paciente aparece atendido por ambos médicos en el mismo instante
+    if len(net_ids) >= 2:
+        by_doc = {d: [e for e in encounters if e["doctor_id"] == d] for d in net_ids}
+        for a in net_ids:
+            for b in net_ids:
+                if a == b:
+                    continue
+                src = by_doc[a]
+                pick = rng.random(len(src)) < 0.08
+                for e, take in zip(src, pick):
+                    if take:
+                        enc_seq += 1
+                        encounters.append({**e, "encounter_id": f"AT{enc_seq:07d}", "doctor_id": b})
 
     return SyntheticDataset(
         doctors=doctors,

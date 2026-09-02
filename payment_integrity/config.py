@@ -121,16 +121,38 @@ class ChangeConfig:
 
 
 @dataclass(frozen=True)
+class GraphConfig:
+    """Capa F — Graph Analytics (relaciones médico–paciente–tiempo)."""
+
+    # minutos de tolerancia para considerar que dos atenciones al mismo paciente coinciden en el tiempo
+    simultaneous_tolerance_min: float = 0.0
+    # n° de atenciones simultáneas que satura el riesgo
+    simultaneous_saturation: int = 6
+    # fracción de pacientes compartidos que satura el riesgo (además del z robusto vs pares)
+    shared_ratio_saturation: float = 0.50
+    # visitas del mismo paciente en el mes a partir de las cuales se considera implausible
+    max_visits_per_patient: int = 4
+    # fracción de la cartera con visitas implausibles que satura el riesgo
+    frequent_ratio_saturation: float = 0.25
+    # atenciones por paciente en múltiplos de la mediana del grupo: riesgo desde 2× y saturación en 4×
+    concentration_gate: float = 2.0
+    # pacientes compartidos mínimos para que una arista cuente en la detección de comunidades
+    community_min_shared: int = 3
+    z_saturation: float = 3.5
+
+
+@dataclass(frozen=True)
 class ScoringConfig:
     """Capa 5 — Risk Scoring compuesto y clasificación por niveles."""
 
     weights: dict = field(
         default_factory=lambda: {
-            "contract_risk": 0.20,   # conciliación contractual + pagos (R07, R08)
-            "activity_risk": 0.25,   # horas sin actividad, bloques vacíos, registro clínico
-            "productivity_risk": 0.20,  # rendimiento + cambio vs histórico propio
-            "peer_risk": 0.20,       # desviación frente a pares equivalentes
-            "anomaly_risk": 0.15,    # Isolation Forest + LOF
+            "contract_risk": 0.18,   # conciliación contractual + pagos (R07, R08)
+            "activity_risk": 0.22,   # horas sin actividad, bloques vacíos, registro clínico
+            "productivity_risk": 0.18,  # rendimiento + cambio vs histórico propio
+            "peer_risk": 0.18,       # desviación frente a pares equivalentes
+            "anomaly_risk": 0.14,    # Isolation Forest + LOF
+            "graph_risk": 0.10,      # relaciones médico–paciente (compartidos, simultáneos, concentración)
         }
     )
     # Cortes del score final (0-100) → niveles de la escala de gobernanza
@@ -148,6 +170,8 @@ class ScoringConfig:
     # Evita que un caso con evidencia directa quede diluido por el promedio ponderado.
     critical_intensity: float = 0.5
     critical_floor: float = 60.0
+    # atenciones simultáneas del mismo paciente con dos médicos: evidencia directa → escala como regla crítica
+    graph_simultaneous_critical: int = 3
     level_labels: dict = field(
         default_factory=lambda: {
             0: "Normal",
@@ -177,6 +201,7 @@ class EngineConfig:
     peer: PeerConfig = field(default_factory=PeerConfig)
     anomaly: AnomalyConfig = field(default_factory=AnomalyConfig)
     change: ChangeConfig = field(default_factory=ChangeConfig)
+    graph: GraphConfig = field(default_factory=GraphConfig)
     scoring: ScoringConfig = field(default_factory=ScoringConfig)
     synthetic: SyntheticConfig = field(default_factory=SyntheticConfig)
 

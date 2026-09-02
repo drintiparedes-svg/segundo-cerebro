@@ -23,6 +23,8 @@ from .layers.rules import apply_rules, dimension_scores
 from .layers.peer import profile_peers
 from .layers.anomaly import detect_anomalies
 from .layers.change import detect_change
+from .layers.graph import analyze_graph, GraphResult
+from .layers.supervised import train_supervised, SupervisedResult
 from .scoring import assemble, doctor_summary, DIMENSIONS, DIMENSION_LABELS
 from . import synthetic
 
@@ -36,16 +38,23 @@ class PipelineResult:
     peer_profiles: pd.DataFrame
     anomalies: pd.DataFrame
     change_weekly: pd.DataFrame
+    graph_metrics: pd.DataFrame
+    graph_edges: pd.DataFrame
+    graph_simultaneous: pd.DataFrame
     scored_periods: pd.DataFrame
     doctor_scores: pd.DataFrame
     validation: dict | None
+    graph: GraphResult | None = None
+    supervised: SupervisedResult | None = None
 
     def tables(self) -> dict[str, pd.DataFrame]:
         return {k: v for k, v in asdict(self).items() if isinstance(v, pd.DataFrame)}
 
 
 def run_pipeline(data: dict[str, pd.DataFrame] | None = None, cfg: EngineConfig = DEFAULT_CONFIG,
-                 output_dir: str | Path | None = "output") -> PipelineResult:
+                 output_dir: str | Path | None = "output", labels: pd.DataFrame | None = None) -> PipelineResult:
+    """Ejecuta las capas 1-5 (+E, +F). Si se entregan ``labels`` (doctor_id, period, label) con
+    auditorías cerradas, entrena además la capa D supervisada y agrega ``supervised_prob``."""
     if data is None:
         data = synthetic.generate(cfg.synthetic).as_dict()
 
@@ -60,17 +69,37 @@ def run_pipeline(data: dict[str, pd.DataFrame] | None = None, cfg: EngineConfig 
     rule_dims = dimension_scores(rule_matrix)
     anomalies = detect_anomalies(period_anom, cfg.anomaly)      # capa 4
     change, change_weekly = detect_change(day, cfg.change)      # capa E
-    scored = assemble(period, recon, rule_matrix, rule_dims, peer, anomalies, change, cfg.scoring)  # capa 5
+    graph = analyze_graph(data["encounters"], data["doctors"], cfg.graph)   # capa F
+    scored = assemble(period, recon, rule_matrix, rule_dims, peer, anomalies, change, cfg.scoring, graph.metrics)  # capa 5
     doctors = doctor_summary(scored, cfg.scoring)
 
     validation = None
     if "scenario" in data["doctors"].columns:
         validation = validate(doctors, data["doctors"])
 
-    result = PipelineResult(day, period, recon, alerts, peer, anomalies, change_weekly, scored, doctors, validation)
+    supervised = apply_supervised(scored, doctors, labels)
+
+    result = PipelineResult(day, period, recon, alerts, peer, anomalies, change_weekly,
+                            graph.metrics, graph.edges, graph.simultaneous, scored, doctors, validation, graph, supervised)
     if output_dir is not None:
         export(result, Path(output_dir), cfg)
     return result
+
+
+def apply_supervised(scored: pd.DataFrame, doctors: pd.DataFrame, labels: pd.DataFrame | None) -> SupervisedResult:
+    """Capa D: entrena con etiquetas de auditoría y agrega la probabilidad al médico-período y al médico."""
+    sup = train_supervised(scored, labels)
+    if sup.enabled:
+        key = ["doctor_id", "period"]
+        for c in ("supervised_prob", "in_training_set"):
+            scored.drop(columns=[c], errors="ignore", inplace=True)
+        merged = scored[key].merge(sup.predictions, on=key, how="left")
+        scored["supervised_prob"] = merged["supervised_prob"].to_numpy()
+        scored["in_training_set"] = merged["in_training_set"].fillna(False).to_numpy()
+        doc_prob = scored.groupby("doctor_id")["supervised_prob"].max().rename("supervised_prob_max")
+        doctors.drop(columns=["supervised_prob_max"], errors="ignore", inplace=True)
+        doctors["supervised_prob_max"] = doctors["doctor_id"].map(doc_prob).to_numpy()
+    return sup
 
 
 def validate(doctors: pd.DataFrame, truth: pd.DataFrame) -> dict:
@@ -108,6 +137,8 @@ def export(result: PipelineResult, out: Path, cfg: EngineConfig) -> None:
     if result.validation is not None:
         (out / "validation.json").write_text(
             json.dumps(result.validation, ensure_ascii=False, indent=2), encoding="utf-8")
+    if result.supervised is not None and result.supervised.enabled:
+        result.supervised.importances.to_csv(out / "supervised_importances.csv", index=False)
     (out / "audit_report.md").write_text(audit_report(result, cfg), encoding="utf-8")
 
 
