@@ -30,6 +30,30 @@ res.scored_periods                   # médico × mes con dimensiones, reglas y 
 res.alerts                           # tabla larga de alertas por regla
 ```
 
+## Front: tablero y reportería
+
+```bash
+streamlit run app/dashboard.py
+```
+
+| Sección | Contenido |
+|---|---|
+| 1 · Carga de datos | Subida de los seis CSV con validación del contrato de datos, vista previa, data de demostración sintética, ejecución del modelo. Parámetros clave y pesos ajustables en la barra lateral. |
+| 2 · Resumen ejecutivo | KPIs (pago total, monto sin respaldo, monto sobre contrato, médicos nivel ≥ 3), distribución por nivel, histograma de scores, top N priorizados, evolución mensual, ranking consolidado. |
+| 3 · Métricas | Filtros por peer group, período y nivel. Rendimiento vs costo por paciente, boxplots por peer group con z-scores, frecuencia y heatmap de reglas, anomalías IF/LOF, conciliación contractual. |
+| 4 · Ficha por médico | Score y nivel, explicación accionable, dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas vs con actividad por día, trayectoria mensual y alertas. |
+| 5 · Reportería | Informe filtrable por nivel mínimo, top N y peer group. Exporta HTML autocontenido imprimible, Markdown, CSV de hallazgos para Sheets/Excel y ZIP con todas las tablas y la configuración usada. |
+
+Cada gráfico tiene su vista de tabla equivalente. La paleta (rampa ordinal azul para niveles y tres
+colores categóricos) fue validada para daltonismo y contraste. El módulo de reportería vive en
+`payment_integrity/reporting.py` y puede usarse sin la interfaz:
+
+```python
+from payment_integrity.reporting import build_report
+bundle = build_report(res, DEFAULT_CONFIG, min_level=3, top_n=20)
+open("informe.html", "w").write(bundle.html)
+```
+
 ## Arquitectura (cinco capas)
 
 ```
@@ -246,6 +270,10 @@ payment_integrity/
   scoring.py           capa 5 + narrativa + consolidación por médico
   pipeline.py          orquestación, validación, exportación, reporte
   __main__.py          CLI
-tests/test_pipeline.py
+  reporting.py         informe de hallazgos (HTML, Markdown, CSV)
+app/
+  dashboard.py         tablero Streamlit (carga, métricas, ficha, reportería)
+  charts.py            gráficos Plotly con paleta validada
+tests/test_pipeline.py, tests/test_app.py
 requirements.txt
 ```
