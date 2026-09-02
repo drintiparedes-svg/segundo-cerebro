@@ -57,38 +57,45 @@ def _minutes(delta: pd.Series) -> pd.Series:
 
 
 def _active_bins(enc: pd.DataFrame, paid_minutes_col: str) -> pd.Series:
-    """N° de bloques de 30 min con al menos una atención dentro de la ventana pagada."""
-    off_s = np.maximum(enc["offset_start"].to_numpy(), 0.0)
-    off_e = np.minimum(enc["offset_end"].to_numpy(), enc[paid_minutes_col].to_numpy())
-    b0 = np.floor(off_s / BIN_MINUTES).astype(int)
-    b1 = np.ceil(off_e / BIN_MINUTES).astype(int)
-    keys, bins = [], []
-    doc = enc["doctor_id"].to_numpy()
-    dt = enc["date"].to_numpy()
-    for i in range(len(enc)):
-        if b1[i] <= b0[i]:
-            continue
-        for b in range(b0[i], b1[i]):
-            keys.append((doc[i], dt[i]))
-            bins.append(b)
-    if not keys:
+    """N° de bloques de 30 min con al menos una atención dentro de la ventana pagada.
+
+    Cada atención cubre un rango de bloques; los rangos se expanden de una vez con la
+    técnica de repetición sobre índices, en vez de recorrer atención por atención.
+    """
+    if enc.empty:
         return pd.Series(dtype=float)
-    tmp = pd.DataFrame(keys, columns=["doctor_id", "date"])
-    tmp["bin"] = bins
+    off_s = np.maximum(enc["offset_start"].to_numpy(dtype=float), 0.0)
+    off_e = np.minimum(enc["offset_end"].to_numpy(dtype=float), enc[paid_minutes_col].to_numpy(dtype=float))
+    b0 = np.floor(np.nan_to_num(off_s, nan=0.0) / BIN_MINUTES).astype(np.int64)
+    b1 = np.ceil(np.nan_to_num(off_e, nan=-1.0) / BIN_MINUTES).astype(np.int64)
+    counts = np.maximum(b1 - b0, 0)
+    total = int(counts.sum())
+    if total == 0:
+        return pd.Series(dtype=float)
+
+    # rangos [b0, b1) concatenados sin bucle: desplazamiento local dentro de cada rango
+    starts_rep = np.repeat(b0, counts)
+    offsets = np.repeat(np.cumsum(counts) - counts, counts)
+    bins = starts_rep + (np.arange(total) - offsets)
+
+    tmp = pd.DataFrame({"doctor_id": np.repeat(enc["doctor_id"].to_numpy(), counts),
+                        "date": np.repeat(enc["date"].to_numpy(), counts),
+                        "bin": bins})
     return tmp.drop_duplicates().groupby(["doctor_id", "date"]).size()
 
 
-def _half_window_concentration(group: pd.DataFrame) -> float:
+def _half_window_concentration(offsets: np.ndarray, span: float) -> float:
     """Fracción de atenciones que cabe en la mitad contigua más cargada del turno."""
-    offsets = group["offset_start"].to_numpy()
-    span = float(group["contract_minutes"].iloc[0])
-    if len(offsets) < 3 or span <= 0:
+    n = offsets.size
+    if n < 3 or not np.isfinite(span) or span <= 0:
         return np.nan
     half = span / 2.0
-    best = 0
-    for w0 in np.arange(0, span - half + 1e-9, 15.0):
-        best = max(best, int(((offsets >= w0) & (offsets < w0 + half)).sum()))
-    return best / len(offsets)
+    windows = np.arange(0.0, span - half + 1e-9, 15.0)
+    if windows.size == 0:
+        return np.nan
+    # matriz ventanas × atenciones: cuántas caen en cada ventana candidata
+    inside = (offsets[None, :] >= windows[:, None]) & (offsets[None, :] < windows[:, None] + half)
+    return float(inside.sum(axis=1).max()) / n
 
 
 def build_day_features(data: dict[str, pd.DataFrame], improbable_min: float = 4.0,
@@ -178,8 +185,10 @@ def build_day_features(data: dict[str, pd.DataFrame], improbable_min: float = 4.
     in_window = enc[enc["contract_start"].notna() & (enc["offset_end"] > 0)]
     active = _active_bins(in_window, "paid_minutes").rename("active_bins").reset_index()
     conc = (
-        in_window.groupby(key)[["offset_start", "contract_minutes"]]
-        .apply(_half_window_concentration)
+        in_window.groupby(key, sort=False)
+        .apply(lambda g: _half_window_concentration(g["offset_start"].to_numpy(dtype=float),
+                                                    float(g["contract_minutes"].iloc[0])),
+               include_groups=False)
         .rename("edge_concentration")
         .reset_index()
     )

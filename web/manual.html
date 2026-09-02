@@ -1,7 +1,58 @@
-<html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.4}table{border-collapse:collapse;width:100%;font-size:9.5pt}th,td{border:1px solid #bbb;padding:4px 6px;vertical-align:top}th{background:#e8f1fb}h1{font-size:20pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt}code{font-family:Consolas,monospace;font-size:9.5pt}pre{background:#f3f3f3;padding:6px}</style></head><body><h1>Payment Integrity Engine — Manual de uso y reglas de indicadores y métricas</h1>
+<!doctype html><html lang="es"><head><meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Manual de uso · Payment Integrity</title>
+<meta name="description" content="Manual de uso y reglas de indicadores y métricas del Payment Integrity Engine">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap">
+<style>
+:root{color-scheme:light;--page:#f5f7f9;--surface:#fcfcfb;--surface-2:#eef2f6;--ink:#0f1720;--ink-2:#4b5a68;--muted:#8a929b;
+  --grid:#e1e0d9;--line:rgba(15,23,32,.10);--accent:#2a78d6;--info-bg:#e8f1fb;--info-ink:#1c5cab;--code-bg:#eef2f6}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--surface-2:#242423;
+  --ink:#fff;--ink-2:#c3c2b7;--muted:#898781;--grid:#2c2c2a;--line:rgba(255,255,255,.10);--accent:#3987e5;--info-bg:#16233a;--info-ink:#9ec5f4;--code-bg:#242423}}
+:root[data-theme="dark"]{color-scheme:dark;--page:#0d0d0d;--surface:#1a1a19;--surface-2:#242423;--ink:#fff;--ink-2:#c3c2b7;
+  --muted:#898781;--grid:#2c2c2a;--line:rgba(255,255,255,.10);--accent:#3987e5;--info-bg:#16233a;--info-ink:#9ec5f4;--code-bg:#242423}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page);color:var(--ink);font-family:"IBM Plex Sans",system-ui,-apple-system,"Segoe UI",sans-serif;font-size:15px;line-height:1.6}
+.shell{display:grid;grid-template-columns:280px minmax(0,1fr);gap:32px;max-width:1240px;margin:0 auto;padding:0 24px 64px;align-items:start}
+@media (max-width:980px){.shell{grid-template-columns:1fr;gap:16px}nav.toc{position:static!important;max-height:none!important}}
+header.top{border-bottom:1px solid var(--line);background:var(--surface)}
+header.top .in{max-width:1240px;margin:0 auto;padding:20px 24px;display:flex;flex-wrap:wrap;gap:12px;align-items:baseline;justify-content:space-between}
+header.top strong{font-size:16px;font-weight:600}
+header.top a{color:var(--accent);text-decoration:none;font-size:13px;font-weight:500}
+header.top a:hover{text-decoration:underline}
+nav.toc{position:sticky;top:24px;max-height:calc(100vh - 48px);overflow:auto;background:var(--surface);border:1px solid var(--line);border-radius:8px;padding:16px 18px;margin-top:28px}
+nav.toc h2{font-size:11px;text-transform:uppercase;letter-spacing:.06em;color:var(--muted);margin:0 0 10px}
+nav.toc ol{list-style:none;margin:0;padding:0;display:flex;flex-direction:column;gap:2px}
+nav.toc a{display:block;padding:4px 8px;border-radius:4px;color:var(--ink-2);text-decoration:none;font-size:13px;border-left:2px solid transparent}
+nav.toc a:hover{background:var(--surface-2);color:var(--ink)}
+nav.toc a:focus-visible{outline:2px solid var(--accent)}
+main{min-width:0;padding-top:28px;max-width:78ch}
+main h1{font-size:28px;font-weight:600;letter-spacing:-.015em;margin:0 0 6px;text-wrap:balance}
+main h1+p{color:var(--ink-2);margin:0 0 8px}
+main h2{font-size:20px;font-weight:600;margin:40px 0 12px;padding-top:12px;border-top:1px solid var(--line);text-wrap:balance;scroll-margin-top:20px}
+main h3{font-size:16px;font-weight:600;margin:26px 0 8px;scroll-margin-top:20px}
+main p,main li{color:var(--ink)}
+main ul,main ol{padding-left:22px}
+main li{margin:3px 0}
+main hr{border:0;border-top:1px solid var(--line);margin:20px 0}
+main strong{font-weight:600}
+code{font-family:"IBM Plex Mono",ui-monospace,Menlo,monospace;font-size:.88em;background:var(--code-bg);padding:1px 5px;border-radius:3px}
+pre{background:var(--code-bg);border:1px solid var(--line);border-radius:6px;padding:12px 14px;overflow-x:auto}
+pre code{background:none;padding:0;font-size:13px;line-height:1.5}
+.tablewrap{overflow-x:auto;border:1px solid var(--line);border-radius:6px;background:var(--surface);margin:14px 0}
+table{border-collapse:collapse;width:100%;font-size:13.5px}
+th,td{padding:8px 11px;border-bottom:1px solid var(--grid);text-align:left;vertical-align:top}
+th{background:var(--surface-2);color:var(--ink-2);font-weight:600;font-size:12.5px;white-space:nowrap}
+tr:last-child td{border-bottom:0}
+blockquote{margin:14px 0;padding:10px 14px;background:var(--info-bg);color:var(--info-ink);border-radius:6px}
+footer{border-top:1px solid var(--line);margin-top:48px;padding-top:16px;font-size:12.5px;color:var(--muted)}
+</style></head><body>
+<header class="top"><div class="in"><strong>Payment Integrity Engine</strong>
+<span><a href="/">← Volver a la demostración</a></span></div></header>
+<div class="shell">
+<nav class="toc" aria-label="Contenidos"><h2>Contenidos</h2><ol><li><a href="#1-proposito-y-principio-rector">1. Propósito y principio rector</a></li><li><a href="#2-arquitectura-en-una-pagina">2. Arquitectura en una página</a></li><li><a href="#3-instalacion-y-ejecucion">3. Instalación y ejecución</a></li><li><a href="#4-flujo-de-uso-del-tablero">4. Flujo de uso del tablero</a></li><li><a href="#4-bis-formatos-de-archivo-aceptados">4 bis. Formatos de archivo aceptados</a></li><li><a href="#5-contrato-de-datos">5. Contrato de datos</a></li><li><a href="#6-control-de-calidad-de-datos">6. Control de calidad de datos</a></li><li><a href="#7-diccionario-de-indicadores-y-metricas">7. Diccionario de indicadores y métricas</a></li><li><a href="#8-reglas-de-negocio">8. Reglas de negocio</a></li><li><a href="#9-risk-score-y-niveles">9. Risk Score y niveles</a></li><li><a href="#10-calibracion-con-data-real">10. Calibración con data real</a></li><li><a href="#11-ciclo-de-auditoria-y-gestion-de-casos">11. Ciclo de auditoría y gestión de casos</a></li><li><a href="#12-reporteria">12. Reportería</a></li><li><a href="#13-gobernanza-limites-y-buenas-practicas">13. Gobernanza, límites y buenas prácticas</a></li><li><a href="#14-anexo-parametros-de-configuracion-por-defecto">14. Anexo · Parámetros de configuración por defecto</a></li></ol></nav><main><h1>Payment Integrity Engine — Manual de uso y reglas de indicadores y métricas</h1>
 <p>Versión 1.0 · Septiembre 2026 · Modelo de Payment Integrity y detección de anomalías en pagos médicos por hora</p>
 <hr />
-<h2>1. Propósito y principio rector</h2>
+<h2 id="1-proposito-y-principio-rector">1. Propósito y principio rector</h2>
 <p>El sistema identifica <strong>riesgo de pago indebido</strong> en esquemas de remuneración médica por hora, cruzando contrato, horas pagadas, actividad clínica efectivamente registrada, comportamiento esperado del profesional y relaciones médico–paciente. Su producto es una <strong>priorización de auditoría explicable</strong>, no una imputación.</p>
 <p>Principios no negociables:</p>
 <ol>
@@ -10,8 +61,8 @@
 <li>Cada alerta viene acompañada de la evidencia cuantificada que la sustenta (horas, montos, percentiles, coincidencias).</li>
 <li>Los parámetros del modelo son explícitos, están en un solo archivo de configuración y deben recalibrarse con data real.</li>
 </ol>
-<h2>2. Arquitectura en una página</h2>
-<table>
+<h2 id="2-arquitectura-en-una-pagina">2. Arquitectura en una página</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Capa</th>
@@ -94,9 +145,9 @@
 <td>Paquete de hallazgos</td>
 </tr>
 </tbody>
-</table>
-<h2>3. Instalación y ejecución</h2>
-<h3>3.1 Local</h3>
+</table></div>
+<h2 id="3-instalacion-y-ejecucion">3. Instalación y ejecución</h2>
+<h3 id="3-1-local">3.1 Local</h3>
 <pre><code class="language-bash">git clone &lt;repositorio&gt;
 cd segundo-cerebro
 pip install -r requirements.txt
@@ -104,8 +155,8 @@ streamlit run app/dashboard.py          # tablero en http://localhost:8501
 python -m payment_integrity             # corrida por línea de comando sobre data sintética
 python -m pytest -q tests               # suite de pruebas
 </code></pre>
-<h3>3.2 Línea de comando</h3>
-<table>
+<h3 id="3-2-linea-de-comando">3.2 Línea de comando</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Comando</th>
@@ -130,9 +181,9 @@ python -m pytest -q tests               # suite de pruebas
 <td>No registra la corrida en la base de casos</td>
 </tr>
 </tbody>
-</table>
-<h3>3.3 Despliegue</h3>
-<table>
+</table></div>
+<h3 id="3-3-despliegue">3.3 Despliegue</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Modalidad</th>
@@ -157,11 +208,11 @@ python -m pytest -q tests               # suite de pruebas
 <td>Importar el repo en Vercel; <code>vercel.json</code> publica la carpeta <code>web</code></td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Regenerar la vista estática tras cambiar el modelo: <code>python scripts/export_static_data.py web</code>.</p>
 <p>Para producción con datos reales, la recomendación es contenedor en infraestructura institucional: los datos de pago y actividad clínica no deben salir del perímetro de la organización.</p>
-<h2>4. Flujo de uso del tablero</h2>
-<h3>Sección 1 · Carga de datos</h3>
+<h2 id="4-flujo-de-uso-del-tablero">4. Flujo de uso del tablero</h2>
+<h3 id="seccion-1-carga-de-datos">Sección 1 · Carga de datos</h3>
 <ol>
 <li>Arrastrar los archivos al cargador, en el formato en que los entrega el sistema de origen (ver sección 4 bis).</li>
 <li>Pulsar <strong>Leer y validar archivos</strong>. El sistema identifica las tablas, traduce las columnas, ejecuta el control de calidad y muestra el informe de ingesta.</li>
@@ -170,19 +221,19 @@ python -m pytest -q tests               # suite de pruebas
 <li>Pulsar <strong>Ejecutar modelo</strong>. La corrida queda registrada en la base de casos con su configuración.</li>
 </ol>
 <p>El botón <strong>Usar data de demostración</strong> genera 60 médicos y 26 semanas con seis escenarios de riesgo inyectados. Sirve para conocer el sistema y validar la instalación.</p>
-<h3>Sección 2 · Resumen ejecutivo</h3>
+<h3 id="seccion-2-resumen-ejecutivo">Sección 2 · Resumen ejecutivo</h3>
 <p>KPIs del período, distribución por nivel, histograma de scores, top N de médicos priorizados, evolución mensual y ranking consolidado. Cada gráfico tiene su tabla equivalente.</p>
-<h3>Sección 3 · Métricas</h3>
+<h3 id="seccion-3-metricas">Sección 3 · Métricas</h3>
 <p>Filtros por peer group, período y nivel mínimo. Cinco pestañas: productividad y costo, perfil de pares, reglas, anomalías y conciliación, y grafo de relaciones.</p>
-<h3>Sección 4 · Ficha por médico</h3>
+<h3 id="seccion-4-ficha-por-medico">Sección 4 · Ficha por médico</h3>
 <p>Score consolidado, nivel, explicación accionable, seis dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas versus con actividad, señales de grafo y vecindario, trayectoria mensual y alertas por regla. Es la vista que usa el auditor para preparar la revisión.</p>
-<h3>Sección 5 · Reportería</h3>
+<h3 id="seccion-5-reporteria">Sección 5 · Reportería</h3>
 <p>Informe filtrable por nivel mínimo, top N y peer group. Exportaciones: HTML imprimible, Markdown, Excel de cinco hojas, CSV de hallazgos y paquete ZIP con todas las tablas y la configuración usada.</p>
-<h3>Sección 6 · Gestión de casos</h3>
+<h3 id="seccion-6-gestion-de-casos">Sección 6 · Gestión de casos</h3>
 <p>Cola de casos por nivel, registro de decisiones (estado, resultado, auditor, comentario), historial completo, carga masiva de auditorías cerradas y entrenamiento de la capa supervisada.</p>
-<h2>4 bis. Formatos de archivo aceptados</h2>
+<h2 id="4-bis-formatos-de-archivo-aceptados">4 bis. Formatos de archivo aceptados</h2>
 <p>No es necesario preparar los archivos ni renombrar columnas: el sistema los acepta como los entrega la fuente.</p>
-<table>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Aspecto</th>
@@ -223,7 +274,7 @@ python -m pytest -q tests               # suite de pruebas
 <td>Un archivo por tabla, un único Excel con una hoja por tabla, o un ZIP con todo</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Cada tabla se identifica por el nombre del archivo o de la hoja y, si eso no basta, por las columnas
 presentes. Un alias ambiguo se resuelve según la tabla: <code>Hora Inicio</code> es inicio de turno en contratos,
 comienzo de la atención en atenciones e inicio de sesión en los logs de acceso.</p>
@@ -233,8 +284,8 @@ observada del peer group. Esta última es un proxy inicial que debe validarse co
 <p>El <strong>informe de ingesta</strong> que aparece tras la carga registra el formato detectado, la codificación, el
 separador, cada columna traducida, las columnas no reconocidas y los valores que no se pudieron
 interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada invalida el análisis.</p>
-<h2>5. Contrato de datos</h2>
-<table>
+<h2 id="5-contrato-de-datos">5. Contrato de datos</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Tabla</th>
@@ -288,7 +339,7 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Logs del sistema clínico</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Convenciones:</p>
 <ul>
 <li>Fechas y timestamps en ISO-8601 (<code>AAAA-MM-DD</code> y <code>AAAA-MM-DD HH:MM:SS</code>).</li>
@@ -298,8 +349,8 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <li><code>peer_group</code> define contra quién se compara cada médico. Punto de partida: especialidad × modalidad × turno. Con menos de cinco pares la comparación se atenúa a la mitad.</li>
 <li><code>expected_rate</code> es el rendimiento esperado en pacientes por hora, definido con el área clínica. Si no existe, usar la mediana observada del peer group como proxy inicial.</li>
 </ul>
-<h2>6. Control de calidad de datos</h2>
-<table>
+<h2 id="6-control-de-calidad-de-datos">6. Control de calidad de datos</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Check</th>
@@ -359,11 +410,11 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Reglas dependientes omitidas</td>
 </tr>
 </tbody>
-</table>
-<h2>7. Diccionario de indicadores y métricas</h2>
+</table></div>
+<h2 id="7-diccionario-de-indicadores-y-metricas">7. Diccionario de indicadores y métricas</h2>
 <p>Todas las métricas se calculan por <strong>médico y mes</strong> salvo indicación. "Hora con actividad" es un bloque de 30 minutos, dentro de la ventana pagada, con al menos una atención registrada.</p>
-<h3>7.1 Horas y pagos</h3>
-<table>
+<h3 id="7-1-horas-y-pagos">7.1 Horas y pagos</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -428,9 +479,9 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Evidencia directa de la conciliación</td>
 </tr>
 </tbody>
-</table>
-<h3>7.2 Producción y costo</h3>
-<table>
+</table></div>
+<h3 id="7-2-produccion-y-costo">7.2 Producción y costo</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -477,9 +528,9 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Base para R11</td>
 </tr>
 </tbody>
-</table>
-<h3>7.3 Integridad del registro</h3>
-<table>
+</table></div>
+<h3 id="7-3-integridad-del-registro">7.3 Integridad del registro</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -544,9 +595,9 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>R13</td>
 </tr>
 </tbody>
-</table>
-<h3>7.4 Comparación con pares</h3>
-<table>
+</table></div>
+<h3 id="7-4-comparacion-con-pares">7.4 Comparación con pares</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -576,9 +627,9 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Percentil ≈ 99,9</td>
 </tr>
 </tbody>
-</table>
-<h3>7.5 Cambio de comportamiento</h3>
-<table>
+</table></div>
+<h3 id="7-5-cambio-de-comportamiento">7.5 Cambio de comportamiento</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -607,9 +658,9 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Caída relativa / 0,60, saturado en 1; se pondera por 1 si hay alarma CUSUM y por 0,5 si no; cero durante la línea base</td>
 </tr>
 </tbody>
-</table>
-<h3>7.6 Relaciones médico–paciente (grafo)</h3>
-<table>
+</table></div>
+<h3 id="7-6-relaciones-medico-paciente-grafo">7.6 Relaciones médico–paciente (grafo)</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Indicador</th>
@@ -649,10 +700,10 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Tamaño de la comunidad</td>
 </tr>
 </tbody>
-</table>
-<h2>8. Reglas de negocio</h2>
+</table></div>
+<h2 id="8-reglas-de-negocio">8. Reglas de negocio</h2>
 <p>La intensidad de cada regla vale 0 en el umbral y 1 en el punto de saturación, lineal entre ambos. Las reglas <strong>críticas</strong> escalan el caso por sí solas cuando su intensidad alcanza 0,5.</p>
-<table>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Código</th>
@@ -822,11 +873,11 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Atención conjunta documentada (interconsulta simultánea)</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>R02 no es crítica por diseño: el bajo rendimiento por sí solo admite explicaciones legítimas. Lo que lo vuelve relevante es su combinación con horas ociosas, desviación frente a pares o caída sostenida.</p>
-<h2>9. Risk Score y niveles</h2>
-<h3>9.1 Dimensiones</h3>
-<table>
+<h2 id="9-risk-score-y-niveles">9. Risk Score y niveles</h2>
+<h3 id="9-1-dimensiones">9.1 Dimensiones</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Dimensión</th>
@@ -866,14 +917,14 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>0,6 × máximo + 0,4 × media de las cuatro señales de grafo</td>
 </tr>
 </tbody>
-</table>
-<h3>9.2 Fórmula</h3>
+</table></div>
+<h3 id="9-2-formula">9.2 Fórmula</h3>
 <pre><code>Score ponderado = 0,18·Contract + 0,22·Activity + 0,18·Productivity + 0,18·Peer + 0,14·Anomaly + 0,10·Graph
 </code></pre>
 <p><strong>Escalamiento crítico.</strong> Si alguna regla crítica alcanza intensidad ≥ 0,5, o G01 se activa, el score final es al menos 60 y sobre ese piso conserva el orden del score ponderado: <code>60 + ponderado × 0,40</code>.</p>
 <p><strong>Consolidación por médico.</strong> <code>máx(0,75 × peor mes + 0,25 × promedio de meses, último mes)</code>. La persistencia pesa y la recencia manda.</p>
-<h3>9.3 Niveles y acciones</h3>
-<table>
+<h3 id="9-3-niveles-y-acciones">9.3 Niveles y acciones</h3>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Nivel</th>
@@ -920,11 +971,11 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Inmediato</td>
 </tr>
 </tbody>
-</table>
-<h3>9.4 Cómo leer la narrativa</h3>
+</table></div>
+<h3 id="9-4-como-leer-la-narrativa">9.4 Cómo leer la narrativa</h3>
 <p>Ejemplo: <em>"Riesgo requiere auditoría — 86/100. Médico en percentil 99 de costo por paciente dentro de su peer group (n=8). El 50 % de las horas pagadas no presenta actividad clínica registrada (45,0 h; $1.773.000 sin respaldo). El rendimiento cayó 59 % respecto de su propio histórico, con señal CUSUM de cambio sostenido. Caso escalado a nivel ≥ 3 por regla crítica (R01)."</em></p>
 <p>Cada frase corresponde a una capa: pares, actividad, cambio, escalamiento. El auditor debe verificar en la fuente primaria cada afirmación antes de concluir.</p>
-<h2>10. Calibración con data real</h2>
+<h2 id="10-calibracion-con-data-real">10. Calibración con data real</h2>
 <ol>
 <li>Correr el modelo sobre un período cerrado de al menos seis meses.</li>
 <li>Revisar <code>period_features</code> y la pestaña de perfil de pares: la mayoría de los médicos debe quedar en nivel 0 o 1. Si más del 10 % queda en nivel 2 o superior sin evidencia, subir los umbrales de las reglas que más disparan.</li>
@@ -934,8 +985,8 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <li>Auditar los casos de nivel 3 y 4 y registrar el resultado en la sección 6. Con 20 casos cerrados y 5 por clase se habilita la capa supervisada.</li>
 <li>Revisar trimestralmente los pesos del score con los resultados de auditoría.</li>
 </ol>
-<h2>11. Ciclo de auditoría y gestión de casos</h2>
-<table>
+<h2 id="11-ciclo-de-auditoria-y-gestion-de-casos">11. Ciclo de auditoría y gestión de casos</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Estado</th>
@@ -956,8 +1007,8 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Con resultado registrado</td>
 </tr>
 </tbody>
-</table>
-<table>
+</table></div>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Resultado</th>
@@ -986,10 +1037,10 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>1</td>
 </tr>
 </tbody>
-</table>
+</table></div>
 <p>Todas las decisiones quedan en historial con auditor, fecha, comentario, score y nivel al momento de la decisión y corrida de origen.</p>
-<h2>12. Reportería</h2>
-<table>
+<h2 id="12-reporteria">12. Reportería</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Formato</th>
@@ -1024,8 +1075,8 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>Archivo de la corrida</td>
 </tr>
 </tbody>
-</table>
-<h2>13. Gobernanza, límites y buenas prácticas</h2>
+</table></div>
+<h2 id="13-gobernanza-limites-y-buenas-practicas">13. Gobernanza, límites y buenas prácticas</h2>
 <ul>
 <li>Denominación: "Modelo de Payment Integrity y detección de anomalías en pagos médicos". Evitar "modelo de fraude" en comunicaciones con profesionales.</li>
 <li>Los datos de pago y actividad clínica se procesan dentro del perímetro institucional. No usar la demostración pública con datos reales.</li>
@@ -1034,8 +1085,8 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <li>La capa supervisada con menos de 60 auditorías es orientativa. Nunca sustituye la revisión.</li>
 <li>Los umbrales y pesos por defecto provienen de juicio experto y validación sobre data sintética; su validez en producción depende de la calibración descrita en la sección 10.</li>
 </ul>
-<h2>14. Anexo · Parámetros de configuración por defecto</h2>
-<table>
+<h2 id="14-anexo-parametros-de-configuracion-por-defecto">14. Anexo · Parámetros de configuración por defecto</h2>
+<div class="tablewrap"><table>
 <thead>
 <tr>
 <th>Grupo</th>
@@ -1100,5 +1151,6 @@ interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada 
 <td>20; 5</td>
 </tr>
 </tbody>
-</table>
-<p>Todos los valores viven en <code>payment_integrity/config.py</code>.</p></body></html>
+</table></div>
+<p>Todos los valores viven en <code>payment_integrity/config.py</code>.</p><footer>Payment Integrity Engine · el score mide riesgo de pago indebido y prioriza auditorías; no constituye imputación. Todo caso de nivel 3 o 4 requiere revisión humana.</footer>
+</main></div></body></html>

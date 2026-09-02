@@ -115,7 +115,8 @@ def generate(cfg: SyntheticConfig | None = None) -> SyntheticDataset:
     rng = np.random.default_rng(cfg.seed)
     doctors = _make_doctors(cfg, rng)
     days = _weekdays(cfg)
-    collapse_start = days[-40]  # últimas 8 semanas
+    # últimas 8 semanas (o la segunda mitad del período si la serie es más corta)
+    collapse_start = days[max(0, len(days) - 40)] if len(days) > 2 else days[0]
 
     contracts, schedule, encounters, sessions, payments = [], [], [], [], []
     appt_seq = enc_seq = pay_seq = 0

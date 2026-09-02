@@ -39,7 +39,7 @@ streamlit run app/dashboard.py
 
 | Sección | Contenido |
 |---|---|
-| 1 · Carga de datos | Subida de las seis tablas en CSV o Excel con validación del contrato de datos, **control de calidad** (errores bloqueantes, advertencias, cobertura), vista previa, data de demostración, ejecución del modelo e historial de corridas. Parámetros clave y pesos ajustables en la barra lateral. |
+| 1 · Carga de datos | Subida de archivos **en cualquier formato** (CSV con cualquier separador, Excel de varias hojas, JSON, Parquet, ZIP) con identificación automática de tablas, traducción de nombres de columna e informe de ingesta; validación del contrato de datos, **control de calidad** (errores bloqueantes, advertencias, cobertura), vista previa, data de demostración, ejecución del modelo e historial de corridas. Parámetros clave y pesos ajustables en la barra lateral. |
 | 2 · Resumen ejecutivo | KPIs (pago total, monto sin respaldo, monto sobre contrato, médicos nivel ≥ 3), distribución por nivel, histograma de scores, top N priorizados, evolución mensual, ranking consolidado. |
 | 3 · Métricas | Filtros por peer group, período y nivel. Rendimiento vs costo por paciente, boxplots por peer group con z-scores, frecuencia y heatmap de reglas, anomalías IF/LOF, conciliación contractual y **grafo de relaciones** médico–médico con vínculos más fuertes y coincidencias temporales. |
 | 4 · Ficha por médico | Score y nivel, explicación accionable, seis dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas vs con actividad, **señales de grafo y vecindario del médico**, trayectoria mensual y alertas. |
@@ -187,6 +187,31 @@ python -m payment_integrity --input data/real --labels auditorias.csv   # import
 python -m payment_integrity --no-db                                       # sin base de casos
 ```
 
+## Ingesta: los archivos se aceptan como vengan
+
+`ingest.py` recibe la data en el formato en que la entrega el sistema de origen, sin preparación previa.
+
+| Aspecto | Qué resuelve |
+|---|---|
+| Formatos | CSV, TSV, TXT, Excel (una o varias hojas), JSON, NDJSON, Parquet y ZIP con cualquiera de ellos |
+| Separador | Detecta coma, punto y coma, tabulador o barra vertical |
+| Codificación | Prueba UTF-8, UTF-8 con BOM, Latin-1 y CP1252 |
+| Nombres de columna | Traduce el español al contrato: `RUT Médico` → `doctor_id`, `Monto Pagado` → `amount`, `N° Pago` → `payment_id` |
+| Alias ambiguos | Resuelve por tabla: `Hora Inicio` es `contract_start` en contratos, `start_ts` en atenciones y `login_ts` en sesiones |
+| Fechas | Interpreta DD/MM/AAAA además de ISO-8601, eligiendo la lectura que deja menos valores inválidos |
+| Montos | Interpreta `$1.234.567,89` y `1,234,567.89`; el punto solo separa miles en columnas monetarias, para que `8.000` horas no se lea como ocho mil |
+| Estados de agenda | Normaliza `ATENDIDA`, `No Asiste`, `Anulada` y equivalentes |
+| Identificación de tabla | Por nombre de archivo o de hoja y, si no basta, por las columnas presentes |
+| Columnas ausentes | Deriva `peer_group` de especialidad y modalidad, `hourly_rate` de monto/horas y `expected_rate` de la mediana del grupo |
+
+Cada transformación queda en un informe de ingesta que el tablero muestra antes de ejecutar el modelo.
+
+```python
+from payment_integrity.ingest import ingest
+data, report = ingest(["liquidaciones.csv", "base_medica.xlsx", "atenciones.json", "logs.zip"])
+report.to_frame()   # qué se leyó y qué se transformó
+```
+
 ## Modelo de datos (contrato de entrada)
 
 Un `dict` de DataFrames (o una carpeta con `tabla.csv`). Fechas en ISO-8601.
@@ -301,6 +326,20 @@ indebido, pero el reporte lo entrega con la caída cuantificada y la alarma CUSU
    (`NORMAL`, `ERROR_ADMINISTRATIVO`, `PAGO_INDEBIDO_CONFIRMADO`, `ABUSO`, `FRAUDE_CONFIRMADO`).
    Con esa base histórica se habilita la capa supervisada (XGBoost/LightGBM) y la calibración de pesos.
 
+## Rendimiento
+
+Medido sobre data sintética en el contenedor de referencia, con el pipeline completo (features, cinco capas, grafo y scoring):
+
+| Escala | Atenciones | Tiempo |
+|---|---:|---:|
+| 120 médicos · 26 semanas | 194.000 | 5,9 s |
+| 300 médicos · 26 semanas | 496.000 | 13,4 s |
+
+La capa de grafos concentraba el 70 % del tiempo y se reescribió de forma vectorizada: las coincidencias
+temporales se resuelven con un barrido sobre enteros restringido a pacientes vistos por más de un médico,
+y los pares de médicos se obtienen por auto-unión sobre el paciente en lugar de recorrer todas las
+combinaciones posibles. Los resultados son idénticos antes y después de la optimización.
+
 ## Supuestos y límites
 
 - **Proxy de "hora con actividad"**: bloques de 30 min con al menos una atención. Con data real puede
@@ -333,6 +372,7 @@ payment_integrity/
     change.py          capa E
     graph.py           capa F (grafo médico–paciente)
     supervised.py      capa D (gradient boosting con auditorías cerradas)
+  ingest.py            lectura tolerante en cualquier formato y normalización al contrato
   quality.py           control de calidad de datos de entrada
   casework.py          gestión de casos, etiquetas e historial de corridas (SQLite)
   scoring.py           capa 5 + narrativa + consolidación por médico
@@ -346,6 +386,6 @@ web/                   vista estática de demostración (Vercel); template.html 
 scripts/               export_static_data.py, build_static_site.py
 docs/MANUAL_DE_USO.md  manual de uso y reglas de indicadores y métricas
 Dockerfile, vercel.json
-tests/test_pipeline.py, tests/test_app.py, tests/test_extensions.py
+tests/test_pipeline.py, test_app.py, test_extensions.py, test_ingest.py
 requirements.txt
 ```

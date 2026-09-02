@@ -25,6 +25,7 @@ from payment_integrity.layers.rules import RULES  # noqa: E402
 from payment_integrity.reporting import build_report, to_excel_bytes, LEVEL_ACTIONS  # noqa: E402
 from payment_integrity.scoring import DIMENSIONS, DIMENSION_LABELS  # noqa: E402
 from payment_integrity.quality import assess, blocking, ERROR, WARN  # noqa: E402
+from payment_integrity.ingest import ingest, ALIASES  # noqa: E402
 from payment_integrity.casework import CaseStore, STATUSES, OUTCOMES, simulate_labels_from_scenarios  # noqa: E402
 from payment_integrity.pipeline import apply_supervised  # noqa: E402
 from payment_integrity.layers.graph import ego_network  # noqa: E402
@@ -54,6 +55,7 @@ if "data" not in st.session_state:
     st.session_state.cfg = DEFAULT_CONFIG
     st.session_state.quality = None
     st.session_state.run_id = None
+    st.session_state.ingest_report = None
 
 
 def get_store() -> CaseStore:
@@ -62,10 +64,10 @@ def get_store() -> CaseStore:
 
 
 def read_table(f) -> pd.DataFrame:
-    name = f.name.lower()
-    if name.endswith((".xlsx", ".xlsm", ".xls")):
-        return pd.read_excel(f)
-    return pd.read_csv(f)
+    """Lee un archivo suelto en cualquier formato soportado (usado para importar auditorías)."""
+    from payment_integrity.ingest import read_any
+    tables = read_any(f, getattr(f, "name", "archivo"))
+    return next(iter(tables.values()))
 
 
 def build_cfg_from_sidebar():
@@ -110,50 +112,65 @@ else:
 # =========================================================================== 1. carga
 def page_load():
     st.header("Carga de datos")
-    st.markdown("Suba las tablas del modelo de datos en CSV o Excel. Cuatro son obligatorias; agenda y sesiones son opcionales "
-                "(las reglas que dependen de ellas se omiten automáticamente). El control de calidad se ejecuta al cargar y bloquea "
-                "la ejecución si detecta errores. También puede usar la data de demostración sintética.")
+    st.markdown("Arrastre aquí los archivos **en el formato en que los entrega el sistema de origen**. El sistema reconoce "
+                "CSV con cualquier separador, Excel de una o varias hojas, JSON, Parquet y ZIP; detecta la codificación, "
+                "traduce los nombres de columna en español e interpreta fechas DD/MM/AAAA y montos con formato local. "
+                "No es necesario preparar los archivos ni renombrar columnas.")
 
     c1, c2 = st.columns([3, 2])
     with c1:
-        uploads = {}
-        st.subheader("Tablas obligatorias")
-        for t in REQUIRED:
-            uploads[t] = st.file_uploader(f"{t} (.csv / .xlsx)", type=["csv", "xlsx", "xls"], key=f"up_{t}", help=TABLE_HELP[t])
-        st.subheader("Tablas opcionales")
-        for t in OPTIONAL:
-            uploads[t] = st.file_uploader(f"{t} (.csv / .xlsx)", type=["csv", "xlsx", "xls"], key=f"up_{t}", help=TABLE_HELP[t])
+        files = st.file_uploader(
+            "Archivos de contrato, pagos, atenciones, agenda y sesiones",
+            type=["csv", "tsv", "txt", "xlsx", "xlsm", "xls", "json", "ndjson", "jsonl", "parquet", "zip"],
+            accept_multiple_files=True, key="up_any",
+            help="Puede subir un archivo por tabla, un único Excel con una hoja por tabla, o un ZIP con todo.")
+        st.caption("El sistema identifica cada tabla por el nombre del archivo o de la hoja y, si no basta, por sus columnas.")
 
-        if st.button("Validar y cargar archivos", type="primary", key="btn_load"):
-            data = {}
-            for t, f in uploads.items():
-                if f is not None:
-                    data[t] = read_table(f)
+        if st.button("Leer y validar archivos", type="primary", key="btn_load", disabled=not files):
             try:
-                validate_inputs(data)
+                data, report = ingest(list(files))
+                st.session_state.ingest_report = report.to_frame()
                 st.session_state.data = data
-                st.session_state.data_source = "archivos cargados"
+                st.session_state.data_source = f"{len(files)} archivo(s) cargado(s)"
                 st.session_state.result = None
                 st.session_state.quality = assess(data, cfg.peer.min_peer_size)
-                st.success("Tablas válidas. Revise el control de calidad y ejecute el modelo.")
-            except ValueError as e:
-                st.error(f"Contrato de datos no cumplido: {e}")
+                found = ", ".join(f"{t} ({len(df):,})".replace(",", ".") for t, df in data.items())
+                st.success(f"Tablas reconocidas: {found}. Revise la ingesta y el control de calidad.")
+            except Exception as e:
+                st.error(f"No se pudieron leer los archivos: {e}")
+
+        rep = st.session_state.get("ingest_report")
+        if rep is not None and len(rep):
+            issues = rep[rep["tipo"] != "INFO"]
+            with st.expander(f"Informe de ingesta · {len(rep)} registros"
+                             + (f" · {len(issues)} requieren atención" if len(issues) else ""),
+                             expanded=bool(len(issues))):
+                st.caption("Qué se leyó de cada archivo y qué transformación se aplicó. Verifique el mapeo de columnas "
+                           "antes de dar por buena la carga.")
+                st.dataframe(rep.sort_values("tipo"), hide_index=True, use_container_width=True, height=320)
 
     with c2:
         st.subheader("Demostración")
         st.markdown("Genera 60 médicos, 26 semanas y 6 escenarios de riesgo inyectados en el 15 % de los médicos, "
-                    "incluida una red de facturación entre dos de ellos. Útil para validar el modelo antes de conectar data real.")
+                    "incluida una red de facturación entre dos de ellos. Útil para conocer el sistema sin data real.")
         if st.button("Usar data de demostración", key="btn_demo"):
             ds = generate_synthetic(cfg.synthetic)
             st.session_state.data = ds.as_dict()
             st.session_state.data_source = "data sintética de demostración"
             st.session_state.result = None
+            st.session_state.ingest_report = None
             st.session_state.quality = assess(st.session_state.data, cfg.peer.min_peer_size)
             st.success("Data de demostración generada. Ejecute el modelo.")
-        st.subheader("Contrato de datos")
+
+        st.subheader("Qué necesita cada tabla")
+        st.caption("Los nombres pueden venir en español: se traducen automáticamente.")
         rows = [{"tabla": t, "obligatoria": "sí", "columnas requeridas": ", ".join(sorted(c))} for t, c in REQUIRED.items()]
         rows += [{"tabla": t, "obligatoria": "no", "columnas requeridas": ", ".join(sorted(c))} for t, c in OPTIONAL.items()]
         st.dataframe(pd.DataFrame(rows), hide_index=True, use_container_width=True)
+        with st.expander("Nombres de columna reconocidos"):
+            st.dataframe(pd.DataFrame([{"columna del modelo": k, "también se acepta": ", ".join(v[:9])}
+                                       for k, v in ALIASES.items()]),
+                         hide_index=True, use_container_width=True, height=300)
 
     if st.session_state.data is not None:
         st.divider()

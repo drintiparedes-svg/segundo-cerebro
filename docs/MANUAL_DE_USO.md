@@ -70,8 +70,8 @@ Para producción con datos reales, la recomendación es contenedor en infraestru
 
 ### Sección 1 · Carga de datos
 
-1. Subir las cuatro tablas obligatorias y, si existen, las dos opcionales, en CSV o Excel.
-2. Pulsar **Validar y cargar archivos**. El sistema verifica el contrato de datos y ejecuta el control de calidad.
+1. Arrastrar los archivos al cargador, en el formato en que los entrega el sistema de origen (ver sección 4 bis).
+2. Pulsar **Leer y validar archivos**. El sistema identifica las tablas, traduce las columnas, ejecuta el control de calidad y muestra el informe de ingesta.
 3. Revisar la tabla de calidad. Los checks de severidad ERROR bloquean la ejecución; las ADVERTENCIAS degradan la confianza de alguna capa; INFO es contexto.
 4. Ajustar, si corresponde, los parámetros en la barra lateral (umbrales R01, R02, R12, mínimo de pares y pesos).
 5. Pulsar **Ejecutar modelo**. La corrida queda registrada en la base de casos con su configuración.
@@ -97,6 +97,33 @@ Informe filtrable por nivel mínimo, top N y peer group. Exportaciones: HTML imp
 ### Sección 6 · Gestión de casos
 
 Cola de casos por nivel, registro de decisiones (estado, resultado, auditor, comentario), historial completo, carga masiva de auditorías cerradas y entrenamiento de la capa supervisada.
+
+## 4 bis. Formatos de archivo aceptados
+
+No es necesario preparar los archivos ni renombrar columnas: el sistema los acepta como los entrega la fuente.
+
+| Aspecto | Qué acepta |
+|---|---|
+| Formatos | CSV, TSV, TXT, Excel (.xlsx, .xlsm, .xls, una o varias hojas), JSON, NDJSON, Parquet, ZIP |
+| Separador | Coma, punto y coma, tabulador o barra vertical, detectado automáticamente |
+| Codificación | UTF-8, UTF-8 con BOM, Latin-1, CP1252 |
+| Nombres de columna | En español o inglés, con o sin acentos, mayúsculas o guiones |
+| Fechas | ISO-8601 y DD/MM/AAAA |
+| Montos | `$1.234.567,89` (local) y `1,234,567.89` (anglosajón) |
+| Estados de agenda | `atendido`, `ATENDIDA`, `Realizada`, `No Asiste`, `Anulada` y equivalentes |
+| Organización | Un archivo por tabla, un único Excel con una hoja por tabla, o un ZIP con todo |
+
+Cada tabla se identifica por el nombre del archivo o de la hoja y, si eso no basta, por las columnas
+presentes. Un alias ambiguo se resuelve según la tabla: `Hora Inicio` es inicio de turno en contratos,
+comienzo de la atención en atenciones e inicio de sesión en los logs de acceso.
+
+Si faltan columnas que pueden deducirse, se derivan y se deja constancia: `peer_group` desde especialidad
+y modalidad, `hourly_rate` desde monto dividido por horas pagadas, y `expected_rate` desde la mediana
+observada del peer group. Esta última es un proxy inicial que debe validarse con el área clínica.
+
+El **informe de ingesta** que aparece tras la carga registra el formato detectado, la codificación, el
+separador, cada columna traducida, las columnas no reconocidas y los valores que no se pudieron
+interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada invalida el análisis.
 
 ## 5. Contrato de datos
 
