@@ -264,7 +264,7 @@ def cmd_collections(args) -> int:
 
 
 def cmd_mail_triage(args) -> int:
-    from .agents import save_report
+    from .agents import save_latest_triage, save_report
     from .agents.mail_triage import PRIORITIES, to_markdown, triage
     from .connectors.gmail import fetch_inbox, sender_name
     from .connectors.google_auth import GoogleAuthError, list_accounts
@@ -290,6 +290,7 @@ def cmd_mail_triage(args) -> int:
     triaged = triage(emails, store, prefer_llm=not args.no_llm)
     report = to_markdown(triaged)
     path = save_report(_brain_dir(args), "triaje-correo", report)
+    save_latest_triage(_brain_dir(args), triaged)
 
     current = None
     for mail in triaged:

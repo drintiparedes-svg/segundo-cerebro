@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from dataclasses import asdict
+from pathlib import Path
 
 from .context import build_context
 
@@ -74,11 +75,24 @@ def context_payload(store, params: dict) -> dict:
     return {"markdown": pack.to_markdown(), "intent": pack.intent}
 
 
+def mail_payload(store, params: dict) -> list:
+    """Último triaje de correo generado por `sb agent mail`. Solo metadatos
+    (remitente, asunto, prioridad, razones); nunca cuerpos."""
+    db_path = getattr(store, "db_path", None)
+    if not db_path:
+        return []
+    latest = Path(db_path).parent / "reports" / "latest-triage.json"
+    if latest.exists():
+        return json.loads(latest.read_text(encoding="utf-8"))
+    return []
+
+
 ROUTES = {
     "/api/graph": lambda store, params: graph_payload(store),
     "/api/kos": kos_payload,
     "/api/search": search_payload,
     "/api/context": context_payload,
+    "/api/mail": mail_payload,
 }
 
 

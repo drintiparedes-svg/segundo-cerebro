@@ -162,6 +162,16 @@
   .chip.task { color: var(--project); border-color: var(--project); }
   .chip.event { color: var(--organization); border-color: var(--organization); }
   .chip.question { color: var(--concept); border-color: var(--concept); }
+  .chip.p1 { color: #e46a6a; border-color: #e46a6a; }
+  .chip.p2 { color: var(--person); border-color: var(--person); }
+  .chip.p3 { color: var(--project); border-color: var(--project); }
+  .chip.p4 { color: var(--ink-dim); }
+  .chip.p5 { color: var(--ink-faint); }
+  .mail-from { font-weight: 600; }
+  .mail-count {
+    font-family: "JetBrains Mono", monospace; font-size: .66rem;
+    color: var(--ink-faint); margin-left: .4rem;
+  }
   .ko p { margin: .15rem 0 0; font-size: .88rem; }
   .ko .who { color: var(--ink-dim); font-size: .78rem; margin-top: .15rem; }
 
@@ -241,6 +251,7 @@
     <button data-tab="decisions" class="active">Decisiones</button>
     <button data-tab="tasks">Compromisos</button>
     <button data-tab="timeline">Timeline</button>
+    <button data-tab="mail">Correo</button>
     <button data-tab="ask">Preguntar</button>
   </nav>
   <div id="panel-body"></div>
@@ -290,6 +301,17 @@ const DEMO = {
       { source: "rhc", target: "falp", type: "belongs_to", valid_from: "2025-06-01" },
     ],
   },
+  mail: [
+    { priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
+      reasons: ["remitente en tu knowledge graph (3 proyectos compartidos)", "lenguaje de plazo"] },
+    { priority: 2, from: "Comité de datos", subject: "Minuta y compromisos de la sesión",
+      reasons: ["pide una acción tuya"] },
+    { priority: 3, from: "NEJM Catalyst", subject: "Encuesta del mes: Clinician Autonomy",
+      reasons: ["relevancia profesional, sin plazo duro"] },
+    { priority: 4, from: "NEJM AI", subject: "Table of Contents Vol. 3", reasons: ["lectura"] },
+    { priority: 5, from: "Retail", subject: "Promociones y newsletters (×23)",
+      reasons: ["correo automático/newsletter"] },
+  ],
   kos: [
     { ko_type: "decision", date: "2026-08-12", statement: "Avanzar con una base de datos validada para cánceres oncohematológicos.", people: ["Inti", "Ricardo", "Raimundo"], status: "active", title: "Modelo de captura oncohematológica" },
     { ko_type: "decision", date: "2026-07-30", statement: "El RHC usará extracción estructurada con revisión humana antes de carga.", people: ["Inti"], status: "active", title: "Pipeline RHC" },
@@ -305,6 +327,7 @@ const DEMO = {
 let demoMode = false;
 let graph = { nodes: [], links: [] };
 let kos = [];
+let mail = [];
 let selected = null;
 let hovered = null;
 
@@ -318,11 +341,13 @@ async function loadData() {
   try {
     graph = await api("/api/graph");
     kos = await api("/api/kos");
+    try { mail = await api("/api/mail"); } catch { mail = []; }
     if (!graph.nodes.length) throw new Error("empty");
   } catch {
     demoMode = true;
     graph = DEMO.graph;
     kos = DEMO.kos;
+    mail = DEMO.mail;
     document.getElementById("demo-note").hidden = false;
   }
   initSim();
@@ -557,8 +582,43 @@ function koCard(ko) {
   </div>`;
 }
 
+const PRIORITY_LABELS = {
+  1: "P1 · Urgente", 2: "P2 · Importante", 3: "P3 · Responder cuando puedas",
+  4: "P4 · Informativo", 5: "P5 · Archivar",
+};
+
+function mailCard(m) {
+  const reasons = (m.reasons || []).map(esc).join("; ");
+  return `<div class="ko">
+    <div class="meta"><span class="chip p${m.priority}">P${m.priority}</span><span>${esc(m.date || "")}</span></div>
+    <p><span class="mail-from">${esc(m.from)}</span> — ${esc(m.subject)}</p>
+    <div class="who">${reasons}</div>
+    ${m.suggested_action ? `<div class="who">Acción sugerida: ${esc(m.suggested_action)}</div>` : ""}
+  </div>`;
+}
+
+function renderMail() {
+  if (!mail.length) {
+    panelBody.innerHTML = `<h2>Triaje de correo</h2>
+      <div class="empty">Sin triaje reciente. Genera uno con <code>sb agent mail</code>
+      y recarga esta página. Solo lectura: tu bandeja nunca se modifica.</div>`;
+    return;
+  }
+  const byP = {};
+  for (const m of mail) (byP[m.priority] = byP[m.priority] || []).push(m);
+  let html = `<h2>Triaje de correo</h2>`;
+  for (const p of [1, 2, 3, 4, 5]) {
+    if (!byP[p]) continue;
+    html += `<div class="node-type" style="margin-top:.9rem">${PRIORITY_LABELS[p]}` +
+            `<span class="mail-count">${byP[p].length}</span></div>`;
+    html += byP[p].map(mailCard).join("");
+  }
+  panelBody.innerHTML = html;
+}
+
 function renderTab() {
   if (selected) return renderNode(selected);
+  if (tab === "mail") return renderMail();
   if (tab === "ask") {
     panelBody.innerHTML = `
       <h2>Preguntar a la memoria</h2>
