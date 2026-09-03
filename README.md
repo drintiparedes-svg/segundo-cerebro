@@ -24,6 +24,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [08 · Despliegue en Vercel](docs/08-despliegue-vercel.md) | vitrina pública en modo demo; el cerebro sigue local |
 | [09 · Fuentes locales y escritorio](docs/09-fuentes-locales.md) | carpetas como fuentes de solo lectura + acceso directo |
 | [10 · Agentes y privacidad](docs/10-agentes-y-privacidad.md) | curador de archivos + triaje de correo; modelo de privacidad |
+| [11 · Áreas y tu día](docs/11-areas-y-tu-dia.md) | mapa de áreas (clasificación 100% local) + brief diario `sb today` |
 
 ## Quickstart
 
@@ -36,6 +37,8 @@ sb tasks                    # compromisos abiertos
 sb decisions                # decision ledger
 sb timeline                 # memoria episódica
 sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:8765
+sb areas                    # tus áreas de trabajo con sus conteos
+sb today                    # brief del día: agenda, compromisos, correo, preguntas
 ```
 
 ### Conectar las carpetas de tu escritorio (solo lectura)

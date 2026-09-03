@@ -22,5 +22,6 @@ brain/**
 !brain/README.md
 !brain/templates/**
 !brain/self/identity.md
+!brain/self/areas.md
 !brain/inbox/2026-08-12-reunion-oncohematologia.md
 !brain/**/.gitkeep

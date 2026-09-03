@@ -48,6 +48,7 @@ class Document:
     body: str
     metadata: dict = field(default_factory=dict)
     ingested_at: str = field(default_factory=now_iso)
+    area: str | None = None
 
     @staticmethod
     def content_hash(body: str) -> str:
@@ -100,6 +101,7 @@ class KnowledgeObject:
     tags: list[str] = field(default_factory=list)
     valid_from: str | None = None
     valid_to: str | None = None
+    area: str | None = None
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)

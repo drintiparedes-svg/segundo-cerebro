@@ -133,9 +133,9 @@
     display: flex; border-bottom: 1px solid var(--line);
   }
   nav button {
-    flex: 1; padding: .7rem .2rem;
+    flex: 1; padding: .7rem .15rem;
     background: none; border: 0; border-bottom: 2px solid transparent;
-    color: var(--ink-dim); font: inherit; font-size: .8rem; cursor: pointer;
+    color: var(--ink-dim); font: inherit; font-size: .76rem; cursor: pointer;
   }
   nav button:hover { color: var(--ink); }
   nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -172,6 +172,21 @@
     font-family: "JetBrains Mono", monospace; font-size: .66rem;
     color: var(--ink-faint); margin-left: .4rem;
   }
+  .area-card {
+    padding: .8rem .9rem; margin-bottom: .6rem;
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: .6rem;
+  }
+  .area-card h3 {
+    font-family: "Fraunces", Georgia, serif; font-weight: 600;
+    font-size: .98rem; margin: 0 0 .3rem;
+  }
+  .area-stats {
+    display: flex; gap: 1rem; flex-wrap: wrap;
+    font-family: "JetBrains Mono", monospace; font-size: .68rem;
+    color: var(--ink-dim); font-variant-numeric: tabular-nums;
+  }
+  .area-stats b { color: var(--ink); font-weight: 500; }
   .ko p { margin: .15rem 0 0; font-size: .88rem; }
   .ko .who { color: var(--ink-dim); font-size: .78rem; margin-top: .15rem; }
 
@@ -248,7 +263,8 @@
 
 <aside id="panel" class="open">
   <nav>
-    <button data-tab="decisions" class="active">Decisiones</button>
+    <button data-tab="areas" class="active">Áreas</button>
+    <button data-tab="decisions">Decisiones</button>
     <button data-tab="tasks">Compromisos</button>
     <button data-tab="timeline">Timeline</button>
     <button data-tab="mail">Correo</button>
@@ -301,6 +317,12 @@ const DEMO = {
       { source: "rhc", target: "falp", type: "belongs_to", valid_from: "2025-06-01" },
     ],
   },
+  areas: [
+    { id: "falp", name: "FALP · Informática Médica", documents: 14, kos: 32, tasks_open: 5, decisions: 7 },
+    { id: "clinica", name: "Clínica · Urología", documents: 6, kos: 11, tasks_open: 2, decisions: 2 },
+    { id: "academia", name: "Academia · MSc", documents: 9, kos: 18, tasks_open: 3, decisions: 4 },
+    { id: "personal", name: "Personal", documents: 4, kos: 6, tasks_open: 1, decisions: 1 },
+  ],
   mail: [
     { priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
       reasons: ["remitente en tu knowledge graph (3 proyectos compartidos)", "lenguaje de plazo"] },
@@ -328,6 +350,7 @@ let demoMode = false;
 let graph = { nodes: [], links: [] };
 let kos = [];
 let mail = [];
+let areasData = [];
 let selected = null;
 let hovered = null;
 
@@ -342,12 +365,14 @@ async function loadData() {
     graph = await api("/api/graph");
     kos = await api("/api/kos");
     try { mail = await api("/api/mail"); } catch { mail = []; }
+    try { areasData = await api("/api/areas"); } catch { areasData = []; }
     if (!graph.nodes.length) throw new Error("empty");
   } catch {
     demoMode = true;
     graph = DEMO.graph;
     kos = DEMO.kos;
     mail = DEMO.mail;
+    areasData = DEMO.areas;
     document.getElementById("demo-note").hidden = false;
   }
   initSim();
@@ -561,7 +586,7 @@ canvas.addEventListener("wheel", (e) => {
 
 /* ── panel ────────────────────────────────────────────────────────────── */
 const panelBody = document.getElementById("panel-body");
-let tab = "decisions";
+let tab = "areas";
 
 document.querySelectorAll("nav button").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -616,8 +641,28 @@ function renderMail() {
   panelBody.innerHTML = html;
 }
 
+function renderAreas() {
+  if (!areasData.length) {
+    panelBody.innerHTML = `<h2>Áreas de trabajo</h2>
+      <div class="empty">Define tu mapa en <code>brain/self/areas.md</code> y
+      corre <code>sb areas assign</code> (clasificación 100% local).</div>`;
+    return;
+  }
+  panelBody.innerHTML = `<h2>Áreas de trabajo</h2>` + areasData.map(a => `
+    <div class="area-card">
+      <h3>${esc(a.name)}</h3>
+      <div class="area-stats">
+        <span><b>${a.documents}</b> docs</span>
+        <span><b>${a.kos}</b> KOs</span>
+        <span><b>${a.tasks_open}</b> tareas</span>
+        <span><b>${a.decisions}</b> decisiones</span>
+      </div>
+    </div>`).join("");
+}
+
 function renderTab() {
   if (selected) return renderNode(selected);
+  if (tab === "areas") return renderAreas();
   if (tab === "mail") return renderMail();
   if (tab === "ask") {
     panelBody.innerHTML = `

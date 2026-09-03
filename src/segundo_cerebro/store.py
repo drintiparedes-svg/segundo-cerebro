@@ -23,7 +23,8 @@ CREATE TABLE IF NOT EXISTS documents (
     body TEXT NOT NULL,
     body_hash TEXT NOT NULL UNIQUE,
     metadata TEXT NOT NULL DEFAULT '{}',
-    ingested_at TEXT NOT NULL
+    ingested_at TEXT NOT NULL,
+    area TEXT
 );
 
 CREATE TABLE IF NOT EXISTS knowledge_objects (
@@ -39,7 +40,8 @@ CREATE TABLE IF NOT EXISTS knowledge_objects (
     source_doc TEXT REFERENCES documents(id),
     tags TEXT NOT NULL DEFAULT '[]',
     valid_from TEXT,
-    valid_to TEXT
+    valid_to TEXT,
+    area TEXT
 );
 
 CREATE TABLE IF NOT EXISTS entities (
@@ -103,6 +105,15 @@ class BrainStore:
         self.conn = sqlite3.connect(self.db_path, check_same_thread=False)
         self.conn.row_factory = sqlite3.Row
         self.conn.executescript(SCHEMA)
+        # Migraciones aditivas para bases creadas antes del campo area.
+        for migration in (
+            "ALTER TABLE documents ADD COLUMN area TEXT",
+            "ALTER TABLE knowledge_objects ADD COLUMN area TEXT",
+        ):
+            try:
+                self.conn.execute(migration)
+            except sqlite3.OperationalError:
+                pass  # la columna ya existe
 
     def close(self) -> None:
         self.conn.close()
@@ -115,10 +126,10 @@ class BrainStore:
         try:
             self.conn.execute(
                 "INSERT INTO documents (id, path, title, doc_type, date, body, "
-                "body_hash, metadata, ingested_at) VALUES (?,?,?,?,?,?,?,?,?)",
+                "body_hash, metadata, ingested_at, area) VALUES (?,?,?,?,?,?,?,?,?,?)",
                 (doc.id, doc.path, doc.title, doc.doc_type, doc.date, doc.body,
                  body_hash, json.dumps(doc.metadata, ensure_ascii=False),
-                 doc.ingested_at),
+                 doc.ingested_at, doc.area),
             )
         except sqlite3.IntegrityError:
             return False
@@ -140,6 +151,31 @@ class BrainStore:
             "SELECT * FROM documents ORDER BY date DESC LIMIT ?", (limit,)
         ).fetchall()
         return [self._row_to_document(r) for r in rows]
+
+    def set_document_area(self, doc_id: str, area: str | None) -> None:
+        self.conn.execute("UPDATE documents SET area = ? WHERE id = ?", (area, doc_id))
+        self.conn.commit()
+
+    def set_ko_area(self, ko_id: str, area: str | None) -> None:
+        self.conn.execute("UPDATE knowledge_objects SET area = ? WHERE id = ?", (area, ko_id))
+        self.conn.commit()
+
+    def area_counts(self) -> dict[str, dict]:
+        """Conteos por área: documentos, KOs, tareas abiertas y decisiones."""
+        out: dict[str, dict] = {}
+        for row in self.conn.execute(
+            "SELECT area, COUNT(*) n FROM documents GROUP BY area"):
+            out.setdefault(row["area"] or "_sin_area", {})["documents"] = row["n"]
+        for row in self.conn.execute(
+            "SELECT area, ko_type, status, COUNT(*) n FROM knowledge_objects "
+            "GROUP BY area, ko_type, status"):
+            bucket = out.setdefault(row["area"] or "_sin_area", {})
+            bucket["kos"] = bucket.get("kos", 0) + row["n"]
+            if row["ko_type"] == "task" and row["status"] == "active":
+                bucket["tasks_open"] = bucket.get("tasks_open", 0) + row["n"]
+            if row["ko_type"] == "decision":
+                bucket["decisions"] = bucket.get("decisions", 0) + row["n"]
+        return out
 
     # ── colecciones (agente curador) ──────────────────────────────────────
 
@@ -181,11 +217,12 @@ class BrainStore:
         self.conn.execute(
             "INSERT OR REPLACE INTO knowledge_objects (id, ko_type, title, "
             "statement, date, people, project, status, confidence, source_doc, "
-            "tags, valid_from, valid_to) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "tags, valid_from, valid_to, area) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ko.id, ko.ko_type, ko.title, ko.statement, ko.date,
              json.dumps(ko.people, ensure_ascii=False), ko.project, ko.status,
              ko.confidence, ko.source_doc,
-             json.dumps(ko.tags, ensure_ascii=False), ko.valid_from, ko.valid_to),
+             json.dumps(ko.tags, ensure_ascii=False), ko.valid_from, ko.valid_to,
+             ko.area),
         )
         self.conn.execute(
             "INSERT INTO kos_fts (id, title, statement) VALUES (?,?,?)",
@@ -199,10 +236,14 @@ class BrainStore:
         status: str | None = None,
         person: str | None = None,
         project: str | None = None,
+        area: str | None = None,
         limit: int = 50,
     ) -> list[KnowledgeObject]:
         sql = "SELECT * FROM knowledge_objects WHERE 1=1"
         params: list = []
+        if area:
+            sql += " AND area = ?"
+            params.append(area)
         if ko_type:
             sql += " AND ko_type = ?"
             params.append(ko_type)
@@ -316,6 +357,7 @@ class BrainStore:
             id=row["id"], path=row["path"], title=row["title"],
             doc_type=row["doc_type"], date=row["date"], body=row["body"],
             metadata=json.loads(row["metadata"]), ingested_at=row["ingested_at"],
+            area=row["area"],
         )
 
     @staticmethod
@@ -327,6 +369,7 @@ class BrainStore:
             status=row["status"], confidence=row["confidence"],
             source_doc=row["source_doc"], tags=json.loads(row["tags"]),
             valid_from=row["valid_from"], valid_to=row["valid_to"],
+            area=row["area"],
         )
 
     @staticmethod

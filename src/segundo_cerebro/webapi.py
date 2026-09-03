@@ -75,6 +75,32 @@ def context_payload(store, params: dict) -> dict:
     return {"markdown": pack.to_markdown(), "intent": pack.intent}
 
 
+def areas_payload(store, params: dict) -> list:
+    """Áreas de trabajo con sus conteos. El mapa se lee del vault local."""
+    from .areas import load_areas
+    if store is None:
+        return []
+    counts = store.area_counts()
+    out = []
+    for area in load_areas():
+        c = counts.get(area.id, {})
+        out.append({
+            "id": area.id, "name": area.name,
+            "documents": c.get("documents", 0), "kos": c.get("kos", 0),
+            "tasks_open": c.get("tasks_open", 0),
+            "decisions": c.get("decisions", 0),
+            "people": area.people, "projects": area.projects,
+        })
+    sin = counts.get("_sin_area", {})
+    if sin.get("documents") or sin.get("kos"):
+        out.append({"id": "_sin_area", "name": "Sin área",
+                    "documents": sin.get("documents", 0), "kos": sin.get("kos", 0),
+                    "tasks_open": sin.get("tasks_open", 0),
+                    "decisions": sin.get("decisions", 0),
+                    "people": [], "projects": []})
+    return out
+
+
 def mail_payload(store, params: dict) -> list:
     """Último triaje de correo generado por `sb agent mail`. Solo metadatos
     (remitente, asunto, prioridad, razones); nunca cuerpos."""
@@ -93,6 +119,7 @@ ROUTES = {
     "/api/search": search_payload,
     "/api/context": context_payload,
     "/api/mail": mail_payload,
+    "/api/areas": areas_payload,
 }
 
 

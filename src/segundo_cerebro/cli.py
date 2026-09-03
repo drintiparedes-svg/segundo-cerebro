@@ -34,6 +34,7 @@ def cmd_ingest(args) -> int:
         print(f"No existe: {target}", file=sys.stderr)
         return 1
     summary = ingest_path(store, target, prefer_llm=not args.no_llm)
+    _auto_assign(args, store)
     print(f"Extractor: {summary['extractor']}")
     print(f"Documentos nuevos: {summary['documents']} (omitidos: {summary['skipped']})")
     print(f"Knowledge objects: {summary['knowledge_objects']}")
@@ -141,6 +142,7 @@ def cmd_google_sync(args) -> int:
         print(line)
         for err in info["errors"]:
             print(f"[{alias}] ERROR {err}", file=sys.stderr)
+    _auto_assign(args, _store(args))
     print(f"Documentos nuevos: {summary['documents']} · "
           f"KOs: {summary['knowledge_objects']} · "
           f"entidades: {summary['entities']} · relaciones: {summary['relationships']}")
@@ -204,6 +206,7 @@ def cmd_sources_sync(args) -> int:
         print(f"[{source['alias']}] nuevos: {result['added']} · "
               f"sin cambios: {result['unchanged']} · "
               f"no soportados: {result['unsupported']}")
+    _auto_assign(args, store)
     print(f"Total — documentos: {summary['documents']} · KOs: {summary['knowledge_objects']} · "
           f"entidades: {summary['entities']} · relaciones: {summary['relationships']}")
     return 0
@@ -303,6 +306,62 @@ def cmd_mail_triage(args) -> int:
     return 0
 
 
+def _auto_assign(args, store) -> None:
+    """Re-clasifica por área tras cada ingesta/sync, si hay mapa de áreas.
+    100% local (palabras clave); silencioso si no existe brain/self/areas.md."""
+    from .areas import assign_all, load_areas
+    areas = load_areas()
+    if areas:
+        assign_all(store, areas)
+
+
+def cmd_areas(args) -> int:
+    from .areas import load_areas
+    areas = load_areas()
+    if not areas:
+        print("No existe brain/self/areas.md — crea tu mapa de áreas primero.",
+              file=sys.stderr)
+        return 1
+    counts = _store(args).area_counts()
+    print(f"{'Área':32} {'docs':>5} {'KOs':>5} {'tareas':>7} {'decis.':>7}")
+    for a in areas:
+        c = counts.get(a.id, {})
+        print(f"{a.name:32} {c.get('documents', 0):>5} {c.get('kos', 0):>5} "
+              f"{c.get('tasks_open', 0):>7} {c.get('decisions', 0):>7}")
+    sin = counts.get("_sin_area", {})
+    if sin:
+        print(f"{'(sin área)':32} {sin.get('documents', 0):>5} {sin.get('kos', 0):>5}")
+    return 0
+
+
+def cmd_areas_assign(args) -> int:
+    from .areas import assign_all, load_areas
+    areas = load_areas()
+    if not areas:
+        print("No existe brain/self/areas.md — crea tu mapa de áreas primero.",
+              file=sys.stderr)
+        return 1
+    summary = assign_all(_store(args), areas)
+    print(f"Documentos clasificados: {summary['documents']} "
+          f"(sin área: {summary['unassigned']}) · KOs: {summary['kos']}")
+    print("Clasificación 100% local (palabras clave + personas + proyectos).")
+    return 0
+
+
+def cmd_today(args) -> int:
+    from .agents import save_report
+    from .areas import load_areas
+    from .today import build_today
+
+    store = _store(args)
+    brief = build_today(store, _brain_dir(args), load_areas())
+    print(brief)
+    if args.save:
+        path = save_report(_brain_dir(args), "brief", brief)
+        print(f"\nGuardado en {path}")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
     if args.snapshot:
@@ -370,6 +429,16 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--path", help="ruta del escritorio si la detección falla")
     p.add_argument("--port", type=int, default=8765)
     p.set_defaults(func=cmd_desktop)
+
+    ar = sub.add_parser("areas", help="áreas de trabajo: mapa y clasificación local")
+    arsub = ar.add_subparsers(dest="areas_command")
+    ar.set_defaults(func=cmd_areas)
+    arp = arsub.add_parser("assign", help="re-clasifica toda la memoria por área")
+    arp.set_defaults(func=cmd_areas_assign)
+
+    p = sub.add_parser("today", help="brief del día: agenda, compromisos, correo, preguntas")
+    p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
+    p.set_defaults(func=cmd_today)
 
     ag = sub.add_parser("agent", help="agentes: curador de archivos y triaje de correo")
     asub = ag.add_subparsers(dest="agent_command", required=True)
