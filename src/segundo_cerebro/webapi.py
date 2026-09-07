@@ -39,6 +39,40 @@ def graph_payload(store) -> dict:
          "degree": degree.get(e.id, 0)}
         for e in entities
     ]
+
+    # Decisiones como nodos del mapa mental: conectadas a sus personas y
+    # proyecto, y encadenadas cronológicamente dentro de cada proyecto.
+    by_name = {}
+    for e in entities:
+        by_name.setdefault(e.name.lower(), e.id)
+    decisions = sorted(
+        store.list_knowledge_objects(ko_type="decision", limit=60),
+        key=lambda k: k.date)
+    prev_in_project: dict = {}
+    for ko in decisions:
+        label = ko.title if len(ko.title) <= 46 else ko.title[:44] + "…"
+        node = {"id": ko.id, "name": label, "type": "decision",
+                "degree": 1, "date": ko.date}
+        nodes.append(node)
+        for person in ko.people:
+            pid = by_name.get(person.lower())
+            if pid:
+                links.append({"source": pid, "target": ko.id,
+                              "type": "decided", "valid_from": ko.date,
+                              "valid_to": None})
+                node["degree"] += 1
+        if ko.project:
+            proj_id = by_name.get(ko.project.lower())
+            if proj_id:
+                links.append({"source": ko.id, "target": proj_id,
+                              "type": "shapes", "valid_from": ko.date,
+                              "valid_to": None})
+            prev = prev_in_project.get(ko.project)
+            if prev:
+                links.append({"source": prev, "target": ko.id,
+                              "type": "precedes", "valid_from": ko.date,
+                              "valid_to": None})
+            prev_in_project[ko.project] = ko.id
     return {"nodes": nodes, "links": links}
 
 
@@ -101,6 +135,22 @@ def areas_payload(store, params: dict) -> list:
     return out
 
 
+def why_payload(store, params: dict) -> dict:
+    """Dossier de una decisión: por qué se tomó. 100% local."""
+    from .areas import load_areas
+    from .why import build_dossier, to_markdown
+    q = params.get("q", "")
+    if store is None or not q:
+        return {"markdown": "Sin memoria o sin consulta.", "found": False}
+    dossier = build_dossier(store, q)
+    if dossier is None:
+        return {"markdown": f"No encontré una decisión que calce con «{q}».",
+                "found": False}
+    names = {a.id: a.name for a in load_areas()}
+    return {"markdown": to_markdown(dossier, names), "found": True,
+            "decision": dossier["decision"]}
+
+
 def mail_payload(store, params: dict) -> list:
     """Último triaje de correo generado por `sb agent mail`. Solo metadatos
     (remitente, asunto, prioridad, razones); nunca cuerpos."""
@@ -120,6 +170,7 @@ ROUTES = {
     "/api/context": context_payload,
     "/api/mail": mail_payload,
     "/api/areas": areas_payload,
+    "/api/why": why_payload,
 }
 
 

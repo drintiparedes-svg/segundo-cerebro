@@ -20,6 +20,7 @@
     --concept: #d0708f;
     --edge: #2c3550;
     --glow: #e0b45833;
+    --decision: #e46a6a;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
@@ -39,6 +40,7 @@
       --concept: #a83c62;
       --edge: #c4cddc;
       --glow: #a97c1d22;
+      --decision: #c2434f;
     }
   }
   :root[data-theme="light"] {
@@ -58,6 +60,7 @@
     --concept: #a83c62;
     --edge: #c4cddc;
     --glow: #a97c1d22;
+    --decision: #c2434f;
   }
 
   * { box-sizing: border-box; }
@@ -259,6 +262,7 @@
   <span><i style="background:var(--project)"></i>Proyectos</span>
   <span><i style="background:var(--organization)"></i>Organizaciones</span>
   <span><i style="background:var(--concept)"></i>Conceptos</span>
+  <span><i style="background:var(--decision); border-radius:2px; transform:rotate(45deg)"></i>Decisiones</span>
 </div>
 
 <aside id="panel" class="open">
@@ -296,6 +300,8 @@ const DEMO = {
       { id: "calibration", name: "Calibration", type: "concept", degree: 1 },
       { id: "hai", name: "Human–AI Collaboration", type: "concept", degree: 3 },
       { id: "hpv", name: "HPV self-sampling", type: "concept", degree: 1 },
+      { id: "dec0", name: "Pipeline RHC con revisión humana", type: "decision", degree: 3 },
+      { id: "dec1", name: "Base oncohematológica validada", type: "decision", degree: 4 },
     ],
     links: [
       { source: "inti", target: "falp", type: "leads_informatics", valid_from: "2025-03-01" },
@@ -315,6 +321,12 @@ const DEMO = {
       { source: "hai", target: "calibration", type: "concept", valid_from: "2026-01-01" },
       { source: "thesis", target: "hpv", type: "case_study", valid_from: "2026-02-01" },
       { source: "rhc", target: "falp", type: "belongs_to", valid_from: "2025-06-01" },
+      { source: "ricardo", target: "dec1", type: "decided", valid_from: "2026-08-12" },
+      { source: "inti", target: "dec1", type: "decided", valid_from: "2026-08-12" },
+      { source: "dec1", target: "oncohem", type: "shapes", valid_from: "2026-08-12" },
+      { source: "dec0", target: "dec1", type: "precedes", valid_from: "2026-08-12" },
+      { source: "inti", target: "dec0", type: "decided", valid_from: "2026-07-30" },
+      { source: "dec0", target: "rhc", type: "shapes", valid_from: "2026-07-30" },
     ],
   },
   areas: [
@@ -465,6 +477,7 @@ function draw() {
   const colors = {
     person: css("--person"), project: css("--project"),
     organization: css("--organization"), concept: css("--concept"),
+    decision: css("--decision"),
   };
   const edgeColor = css("--edge");
   const inkDim = css("--ink-dim");
@@ -514,7 +527,14 @@ function draw() {
       ctx.fill();
     }
     ctx.beginPath();
-    ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    if (n.type === "decision") {
+      const r = n.r + 1;                       // rombo: la decisión destaca
+      ctx.moveTo(n.x, n.y - r); ctx.lineTo(n.x + r, n.y);
+      ctx.lineTo(n.x, n.y + r); ctx.lineTo(n.x - r, n.y);
+      ctx.closePath();
+    } else {
+      ctx.arc(n.x, n.y, n.r, 0, Math.PI * 2);
+    }
     ctx.fillStyle = color;
     ctx.fill();
     ctx.lineWidth = 1.5;
@@ -693,7 +713,29 @@ function selectNode(n) {
   renderNode(n);
 }
 
+async function renderWhy(n) {
+  panelBody.innerHTML = `<div class="node-type">decisión</div>
+    <h2>${esc(n.name)}</h2><div class="empty">Reconstruyendo la cadena…</div>`;
+  if (demoMode) {
+    panelBody.innerHTML = `<div class="node-type">decisión</div>
+      <h2>${esc(n.name)}</h2>
+      <div id="ask-result">Modo demo — en tu instancia local, este panel
+muestra el dossier completo: evidencia de origen, cadena de decisiones
+previas y posteriores, compromisos derivados y lo que quedó abierto.
+Pruébalo con: sb why "${esc(n.name)}"</div>`;
+    return;
+  }
+  try {
+    const res = await api("/api/why?q=" + encodeURIComponent(n.name));
+    panelBody.innerHTML = `<div class="node-type">decisión</div>
+      <div id="ask-result">${esc(res.markdown)}</div>`;
+  } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
+  }
+}
+
 function renderNode(n) {
+  if (n.type === "decision") return renderWhy(n);
   const rels = links.filter(l => l.a.id === n.id || l.b.id === n.id);
   const relHtml = rels.map(l => {
     const other = l.a.id === n.id ? l.b : l.a;

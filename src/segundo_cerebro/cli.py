@@ -362,6 +362,26 @@ def cmd_today(args) -> int:
     return 0
 
 
+def cmd_why(args) -> int:
+    from .agents import save_report
+    from .areas import load_areas
+    from .why import build_dossier, to_markdown
+
+    store = _store(args)
+    dossier = build_dossier(store, args.query)
+    if dossier is None:
+        print(f"No encontré una decisión que calce con «{args.query}». "
+              "Revisa el registro con: sb decisions", file=sys.stderr)
+        return 1
+    names = {a.id: a.name for a in load_areas()}
+    md = to_markdown(dossier, names)
+    print(md)
+    if args.save:
+        path = save_report(_brain_dir(args), "por-que", md)
+        print(f"\nGuardado en {path}")
+    return 0
+
+
 def cmd_serve(args) -> int:
     from .server import serve
     if args.snapshot:
@@ -439,6 +459,11 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("today", help="brief del día: agenda, compromisos, correo, preguntas")
     p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
     p.set_defaults(func=cmd_today)
+
+    p = sub.add_parser("why", help="por qué se tomó una decisión: cadena, evidencia y pendientes")
+    p.add_argument("query", help="tema o texto de la decisión")
+    p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
+    p.set_defaults(func=cmd_why)
 
     ag = sub.add_parser("agent", help="agentes: curador de archivos y triaje de correo")
     asub = ag.add_subparsers(dest="agent_command", required=True)

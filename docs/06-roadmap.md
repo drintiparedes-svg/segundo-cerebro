@@ -42,6 +42,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
 
 - ✅ Primeros agentes de solo lectura: curador de archivos y triaje de
   correo con cruce del knowledge graph ([docs/10](10-agentes-y-privacidad.md))
+- ✅ Áreas de trabajo + brief diario `sb today` ([docs/11](11-areas-y-tu-dia.md))
+- ✅ Mapa mental de decisiones `sb why` ([docs/12](12-mapa-de-decisiones.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes
