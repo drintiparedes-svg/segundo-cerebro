@@ -1,0 +1,1104 @@
+<html><head><meta charset='utf-8'><style>body{font-family:Arial,sans-serif;font-size:11pt;line-height:1.4}table{border-collapse:collapse;width:100%;font-size:9.5pt}th,td{border:1px solid #bbb;padding:4px 6px;vertical-align:top}th{background:#e8f1fb}h1{font-size:20pt}h2{font-size:14pt;margin-top:18pt}h3{font-size:12pt}code{font-family:Consolas,monospace;font-size:9.5pt}pre{background:#f3f3f3;padding:6px}</style></head><body><h1>Payment Integrity Engine — Manual de uso y reglas de indicadores y métricas</h1>
+<p>Versión 1.0 · Septiembre 2026 · Modelo de Payment Integrity y detección de anomalías en pagos médicos por hora</p>
+<hr />
+<h2>1. Propósito y principio rector</h2>
+<p>El sistema identifica <strong>riesgo de pago indebido</strong> en esquemas de remuneración médica por hora, cruzando contrato, horas pagadas, actividad clínica efectivamente registrada, comportamiento esperado del profesional y relaciones médico–paciente. Su producto es una <strong>priorización de auditoría explicable</strong>, no una imputación.</p>
+<p>Principios no negociables:</p>
+<ol>
+<li>El score mide riesgo de pago indebido; el fraude solo se confirma tras investigación humana.</li>
+<li>Todo caso de nivel 3 o 4 requiere revisión de un auditor antes de cualquier acción administrativa o laboral.</li>
+<li>Cada alerta viene acompañada de la evidencia cuantificada que la sustenta (horas, montos, percentiles, coincidencias).</li>
+<li>Los parámetros del modelo son explícitos, están en un solo archivo de configuración y deben recalibrarse con data real.</li>
+</ol>
+<h2>2. Arquitectura en una página</h2>
+<table>
+<thead>
+<tr>
+<th>Capa</th>
+<th>Módulo</th>
+<th>Qué hace</th>
+<th>Salida</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Calidad de datos</td>
+<td><code>quality.py</code></td>
+<td>Valida el contrato de datos, fechas, claves, integridad referencial y cobertura</td>
+<td>Tabla de checks con severidad</td>
+</tr>
+<tr>
+<td>Features</td>
+<td><code>features.py</code></td>
+<td>Deriva unas 30 variables por médico-día y médico-mes</td>
+<td><code>period_features</code></td>
+</tr>
+<tr>
+<td>1 · Conciliación contractual</td>
+<td><code>layers/reconciliation.py</code></td>
+<td>Cruza contrato, pago y actividad; cuantifica pesos sin respaldo</td>
+<td><code>reconciliation</code>, ContractRisk</td>
+</tr>
+<tr>
+<td>2 · Reglas de negocio</td>
+<td><code>layers/rules.py</code></td>
+<td>13 reglas explícitas con umbral, saturación e intensidad 0-1</td>
+<td><code>alerts</code>, ActivityRisk, ProductivityRisk</td>
+</tr>
+<tr>
+<td>3 · Perfil de pares</td>
+<td><code>layers/peer.py</code></td>
+<td>Z-score robusto (MAD) y percentiles dentro del peer group</td>
+<td>PeerRisk</td>
+</tr>
+<tr>
+<td>4 · Anomalías</td>
+<td><code>layers/anomaly.py</code></td>
+<td>Isolation Forest y LOF sobre z-scores intra-grupo</td>
+<td>AnomalyRisk</td>
+</tr>
+<tr>
+<td>E · Cambio de comportamiento</td>
+<td><code>layers/change.py</code></td>
+<td>EWMA y CUSUM del médico contra su propio histórico</td>
+<td>Refuerza ProductivityRisk</td>
+</tr>
+<tr>
+<td>F · Grafo</td>
+<td><code>layers/graph.py</code></td>
+<td>Relaciones médico–paciente–tiempo: compartidos, simultáneos, concentración, comunidades</td>
+<td>GraphRisk, G01</td>
+</tr>
+<tr>
+<td>5 · Scoring</td>
+<td><code>scoring.py</code></td>
+<td>Score compuesto 0-100, escalamiento crítico, niveles 0-4, narrativa</td>
+<td><code>scored_periods</code>, <code>doctor_scores</code></td>
+</tr>
+<tr>
+<td>D · Supervisada</td>
+<td><code>layers/supervised.py</code></td>
+<td>Gradient boosting con auditorías cerradas</td>
+<td><code>supervised_prob</code></td>
+</tr>
+<tr>
+<td>Gestión de casos</td>
+<td><code>casework.py</code></td>
+<td>Decisiones del auditor, historial y corridas en SQLite</td>
+<td>Etiquetas para la capa D</td>
+</tr>
+<tr>
+<td>Reportería</td>
+<td><code>reporting.py</code></td>
+<td>Informe HTML, Markdown, Excel, CSV</td>
+<td>Paquete de hallazgos</td>
+</tr>
+</tbody>
+</table>
+<h2>3. Instalación y ejecución</h2>
+<h3>3.1 Local</h3>
+<pre><code class="language-bash">git clone &lt;repositorio&gt;
+cd segundo-cerebro
+pip install -r requirements.txt
+streamlit run app/dashboard.py          # tablero en http://localhost:8501
+python -m payment_integrity             # corrida por línea de comando sobre data sintética
+python -m pytest -q tests               # suite de pruebas
+</code></pre>
+<h3>3.2 Línea de comando</h3>
+<table>
+<thead>
+<tr>
+<th>Comando</th>
+<th>Efecto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>python -m payment_integrity --input data/real --output output/real</code></td>
+<td>Corre el modelo sobre CSV reales</td>
+</tr>
+<tr>
+<td><code>python -m payment_integrity --labels auditorias.csv</code></td>
+<td>Importa auditorías cerradas y entrena la capa supervisada</td>
+</tr>
+<tr>
+<td><code>python -m payment_integrity --synthetic-out data/synthetic</code></td>
+<td>Exporta la data sintética para pruebas</td>
+</tr>
+<tr>
+<td><code>python -m payment_integrity --no-db</code></td>
+<td>No registra la corrida en la base de casos</td>
+</tr>
+</tbody>
+</table>
+<h3>3.3 Despliegue</h3>
+<table>
+<thead>
+<tr>
+<th>Modalidad</th>
+<th>Uso</th>
+<th>Cómo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Contenedor (Render, Railway, Cloud Run, servidor propio)</td>
+<td>Tablero interactivo completo: carga de archivos, modelo, gestión de casos</td>
+<td><code>docker build -t payment-integrity . &amp;&amp; docker run -p 8501:8501 payment-integrity</code></td>
+</tr>
+<tr>
+<td>Streamlit Community Cloud</td>
+<td>Tablero interactivo completo desde el repositorio GitHub</td>
+<td>Importar el repo, archivo principal <code>app/dashboard.py</code></td>
+</tr>
+<tr>
+<td>Vercel</td>
+<td><strong>Solo la vista estática de demostración</strong> (<code>web/</code>): resultados precalculados, gráficos e informe. Vercel no ejecuta servidores persistentes como Streamlit</td>
+<td>Importar el repo en Vercel; <code>vercel.json</code> publica la carpeta <code>web</code></td>
+</tr>
+</tbody>
+</table>
+<p>Regenerar la vista estática tras cambiar el modelo: <code>python scripts/export_static_data.py web</code>.</p>
+<p>Para producción con datos reales, la recomendación es contenedor en infraestructura institucional: los datos de pago y actividad clínica no deben salir del perímetro de la organización.</p>
+<h2>4. Flujo de uso del tablero</h2>
+<h3>Sección 1 · Carga de datos</h3>
+<ol>
+<li>Arrastrar los archivos al cargador, en el formato en que los entrega el sistema de origen (ver sección 4 bis).</li>
+<li>Pulsar <strong>Leer y validar archivos</strong>. El sistema identifica las tablas, traduce las columnas, ejecuta el control de calidad y muestra el informe de ingesta.</li>
+<li>Revisar la tabla de calidad. Los checks de severidad ERROR bloquean la ejecución; las ADVERTENCIAS degradan la confianza de alguna capa; INFO es contexto.</li>
+<li>Ajustar, si corresponde, los parámetros en la barra lateral (umbrales R01, R02, R12, mínimo de pares y pesos).</li>
+<li>Pulsar <strong>Ejecutar modelo</strong>. La corrida queda registrada en la base de casos con su configuración.</li>
+</ol>
+<p>El botón <strong>Usar data de demostración</strong> genera 60 médicos y 26 semanas con seis escenarios de riesgo inyectados. Sirve para conocer el sistema y validar la instalación.</p>
+<h3>Sección 2 · Resumen ejecutivo</h3>
+<p>KPIs del período, distribución por nivel, histograma de scores, top N de médicos priorizados, evolución mensual y ranking consolidado. Cada gráfico tiene su tabla equivalente.</p>
+<h3>Sección 3 · Métricas</h3>
+<p>Filtros por peer group, período y nivel mínimo. Cinco pestañas: productividad y costo, perfil de pares, reglas, anomalías y conciliación, y grafo de relaciones.</p>
+<h3>Sección 4 · Ficha por médico</h3>
+<p>Score consolidado, nivel, explicación accionable, seis dimensiones, comparación con pares, serie semanal con línea base, EWMA y alarmas CUSUM, horas pagadas versus con actividad, señales de grafo y vecindario, trayectoria mensual y alertas por regla. Es la vista que usa el auditor para preparar la revisión.</p>
+<h3>Sección 5 · Reportería</h3>
+<p>Informe filtrable por nivel mínimo, top N y peer group. Exportaciones: HTML imprimible, Markdown, Excel de cinco hojas, CSV de hallazgos y paquete ZIP con todas las tablas y la configuración usada.</p>
+<h3>Sección 6 · Gestión de casos</h3>
+<p>Cola de casos por nivel, registro de decisiones (estado, resultado, auditor, comentario), historial completo, carga masiva de auditorías cerradas y entrenamiento de la capa supervisada.</p>
+<h2>4 bis. Formatos de archivo aceptados</h2>
+<p>No es necesario preparar los archivos ni renombrar columnas: el sistema los acepta como los entrega la fuente.</p>
+<table>
+<thead>
+<tr>
+<th>Aspecto</th>
+<th>Qué acepta</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Formatos</td>
+<td>CSV, TSV, TXT, Excel (.xlsx, .xlsm, .xls, una o varias hojas), JSON, NDJSON, Parquet, ZIP</td>
+</tr>
+<tr>
+<td>Separador</td>
+<td>Coma, punto y coma, tabulador o barra vertical, detectado automáticamente</td>
+</tr>
+<tr>
+<td>Codificación</td>
+<td>UTF-8, UTF-8 con BOM, Latin-1, CP1252</td>
+</tr>
+<tr>
+<td>Nombres de columna</td>
+<td>En español o inglés, con o sin acentos, mayúsculas o guiones</td>
+</tr>
+<tr>
+<td>Fechas</td>
+<td>ISO-8601 y DD/MM/AAAA</td>
+</tr>
+<tr>
+<td>Montos</td>
+<td><code>$1.234.567,89</code> (local) y <code>1,234,567.89</code> (anglosajón)</td>
+</tr>
+<tr>
+<td>Estados de agenda</td>
+<td><code>atendido</code>, <code>ATENDIDA</code>, <code>Realizada</code>, <code>No Asiste</code>, <code>Anulada</code> y equivalentes</td>
+</tr>
+<tr>
+<td>Organización</td>
+<td>Un archivo por tabla, un único Excel con una hoja por tabla, o un ZIP con todo</td>
+</tr>
+</tbody>
+</table>
+<p>Cada tabla se identifica por el nombre del archivo o de la hoja y, si eso no basta, por las columnas
+presentes. Un alias ambiguo se resuelve según la tabla: <code>Hora Inicio</code> es inicio de turno en contratos,
+comienzo de la atención en atenciones e inicio de sesión en los logs de acceso.</p>
+<p>Si faltan columnas que pueden deducirse, se derivan y se deja constancia: <code>peer_group</code> desde especialidad
+y modalidad, <code>hourly_rate</code> desde monto dividido por horas pagadas, y <code>expected_rate</code> desde la mediana
+observada del peer group. Esta última es un proxy inicial que debe validarse con el área clínica.</p>
+<p>El <strong>informe de ingesta</strong> que aparece tras la carga registra el formato detectado, la codificación, el
+separador, cada columna traducida, las columnas no reconocidas y los valores que no se pudieron
+interpretar. Revíselo antes de dar por buena la carga: una columna mal mapeada invalida el análisis.</p>
+<h2>5. Contrato de datos</h2>
+<table>
+<thead>
+<tr>
+<th>Tabla</th>
+<th>Obligatoria</th>
+<th>Columnas requeridas</th>
+<th>Opcionales</th>
+<th>Fuente habitual</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td><code>doctors</code></td>
+<td>Sí</td>
+<td><code>doctor_id</code>, <code>peer_group</code>, <code>expected_rate</code>, <code>hourly_rate</code></td>
+<td><code>specialty</code>, <code>modality</code>, <code>shift</code></td>
+<td>RR. HH., contratos</td>
+</tr>
+<tr>
+<td><code>contracts</code></td>
+<td>Sí</td>
+<td><code>doctor_id</code>, <code>date</code>, <code>contract_start</code>, <code>contract_end</code>, <code>contracted_hours</code></td>
+<td></td>
+<td>Contratos, turnos</td>
+</tr>
+<tr>
+<td><code>encounters</code></td>
+<td>Sí</td>
+<td><code>encounter_id</code>, <code>doctor_id</code>, <code>patient_id</code>, <code>date</code>, <code>start_ts</code>, <code>end_ts</code></td>
+<td><code>has_clinical_record</code>, <code>record_created_ts</code>, <code>service_type</code></td>
+<td>Ficha clínica, HIS</td>
+</tr>
+<tr>
+<td><code>payments</code></td>
+<td>Sí</td>
+<td><code>payment_id</code>, <code>doctor_id</code>, <code>date</code>, <code>paid_hours</code>, <code>amount</code></td>
+<td><code>hourly_rate</code></td>
+<td>Remuneraciones</td>
+</tr>
+<tr>
+<td><code>schedule</code></td>
+<td>No</td>
+<td><code>doctor_id</code>, <code>date</code>, <code>status</code></td>
+<td><code>slot_start</code>, <code>patient_id</code></td>
+<td>Agenda</td>
+</tr>
+<tr>
+<td><code>sessions</code></td>
+<td>No</td>
+<td><code>doctor_id</code>, <code>date</code>, <code>login_ts</code>, <code>logout_ts</code></td>
+<td></td>
+<td>Logs del sistema clínico</td>
+</tr>
+</tbody>
+</table>
+<p>Convenciones:</p>
+<ul>
+<li>Fechas y timestamps en ISO-8601 (<code>AAAA-MM-DD</code> y <code>AAAA-MM-DD HH:MM:SS</code>).</li>
+<li><code>status</code> de agenda con valores <code>atendido</code>, <code>ausente</code>, <code>cancelado</code>.</li>
+<li><code>has_clinical_record</code> booleano. Si falta, las reglas R12 y R13 se omiten.</li>
+<li>Un registro de <code>payments</code> por médico y día. Dos registros el mismo día se interpretan como pago duplicado (R08).</li>
+<li><code>peer_group</code> define contra quién se compara cada médico. Punto de partida: especialidad × modalidad × turno. Con menos de cinco pares la comparación se atenúa a la mitad.</li>
+<li><code>expected_rate</code> es el rendimiento esperado en pacientes por hora, definido con el área clínica. Si no existe, usar la mediana observada del peer group como proxy inicial.</li>
+</ul>
+<h2>6. Control de calidad de datos</h2>
+<table>
+<thead>
+<tr>
+<th>Check</th>
+<th>Severidad</th>
+<th>Efecto</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Tabla o columna obligatoria ausente</td>
+<td>ERROR</td>
+<td>Bloquea la ejecución</td>
+</tr>
+<tr>
+<td>Fechas no interpretables</td>
+<td>ERROR</td>
+<td>Bloquea</td>
+</tr>
+<tr>
+<td><code>doctor_id</code> inexistente en <code>doctors</code></td>
+<td>ERROR</td>
+<td>Bloquea: el médico no tendría peer group ni rendimiento esperado</td>
+</tr>
+<tr>
+<td>Fin de atención anterior al inicio; horas pagadas negativas; <code>expected_rate</code> ausente o ≤ 0</td>
+<td>ERROR</td>
+<td>Bloquea</td>
+</tr>
+<tr>
+<td>Claves duplicadas en <code>doctors</code>, <code>encounters</code>, <code>contracts</code></td>
+<td>ERROR</td>
+<td>Bloquea</td>
+</tr>
+<tr>
+<td>Claves duplicadas en <code>payments</code></td>
+<td>ADVERTENCIA</td>
+<td>Puede ser un pago duplicado real (R08)</td>
+</tr>
+<tr>
+<td>Nulos en columnas clave, horas pagadas &gt; 16 al día, atenciones &gt; 4 horas</td>
+<td>ADVERTENCIA</td>
+<td>Revisar la fuente; el modelo corre</td>
+</tr>
+<tr>
+<td>Días pagados sin contrato; atenciones en días sin contrato</td>
+<td>ADVERTENCIA</td>
+<td>Alimentan ContractRisk y R03</td>
+</tr>
+<tr>
+<td>Peer groups con menos de 5 médicos</td>
+<td>ADVERTENCIA</td>
+<td>PeerRisk atenuado</td>
+</tr>
+<tr>
+<td>Tablas opcionales ausentes</td>
+<td>INFO</td>
+<td>Reglas dependientes omitidas</td>
+</tr>
+</tbody>
+</table>
+<h2>7. Diccionario de indicadores y métricas</h2>
+<p>Todas las métricas se calculan por <strong>médico y mes</strong> salvo indicación. "Hora con actividad" es un bloque de 30 minutos, dentro de la ventana pagada, con al menos una atención registrada.</p>
+<h3>7.1 Horas y pagos</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Fórmula</th>
+<th>Unidad</th>
+<th>Lectura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Horas contratadas</td>
+<td>Σ <code>contracted_hours</code> de los bloques del mes</td>
+<td>h</td>
+<td>Base contractual</td>
+</tr>
+<tr>
+<td>Horas pagadas</td>
+<td>Σ <code>paid_hours</code> (incluye duplicados)</td>
+<td>h</td>
+<td>Lo efectivamente remunerado</td>
+</tr>
+<tr>
+<td>Horas con actividad</td>
+<td>Bloques de 30 min con ≥ 1 atención × 0,5, tope en horas pagadas</td>
+<td>h</td>
+<td>Actividad clínica demostrable</td>
+</tr>
+<tr>
+<td>Horas ociosas (<code>idle_hours</code>)</td>
+<td>Horas pagadas − horas con actividad</td>
+<td>h</td>
+<td>Horas pagadas sin respaldo de actividad</td>
+</tr>
+<tr>
+<td>Ratio de horas ociosas (<code>idle_hours_ratio</code>)</td>
+<td>Horas ociosas / horas pagadas</td>
+<td>%</td>
+<td>Regla R01. Referencia esperada 5–15 %</td>
+</tr>
+<tr>
+<td>Utilización</td>
+<td>Horas con actividad / horas pagadas</td>
+<td>%</td>
+<td>Complemento del anterior</td>
+</tr>
+<tr>
+<td>Horas pagadas / contratadas</td>
+<td>Horas pagadas / horas contratadas</td>
+<td>ratio</td>
+<td>&gt; 1 indica pago sobre contrato</td>
+</tr>
+<tr>
+<td>Monto sin respaldo (<code>idle_amount</code>)</td>
+<td>Horas ociosas × valor hora</td>
+<td>CLP</td>
+<td>Monto a revisar, no pérdida confirmada</td>
+</tr>
+<tr>
+<td>Monto sobre contrato o duplicado (<code>amount_at_risk</code>)</td>
+<td>(Horas pagadas − contratadas)⁺ × valor hora + pagos duplicados</td>
+<td>CLP</td>
+<td>Evidencia directa de la conciliación</td>
+</tr>
+</tbody>
+</table>
+<h3>7.2 Producción y costo</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Fórmula</th>
+<th>Unidad</th>
+<th>Lectura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pacientes atendidos</td>
+<td>N° de atenciones registradas</td>
+<td>n</td>
+<td></td>
+</tr>
+<tr>
+<td>Pacientes por hora</td>
+<td>Pacientes atendidos / horas pagadas</td>
+<td>pac/h</td>
+<td>Rendimiento observado</td>
+</tr>
+<tr>
+<td>Rendimiento vs esperado (<code>performance_ratio</code>)</td>
+<td>Pacientes por hora / <code>expected_rate</code></td>
+<td>ratio</td>
+<td>Regla R02. Referencia 0,7–1,1</td>
+</tr>
+<tr>
+<td>Costo por paciente</td>
+<td>Monto pagado / pacientes atendidos</td>
+<td>CLP</td>
+<td>Métrica clave de comparación con pares</td>
+</tr>
+<tr>
+<td>No-show</td>
+<td>Ausentes / agendados</td>
+<td>%</td>
+<td>Contexto para rendimiento bajo legítimo</td>
+</tr>
+<tr>
+<td>Duración media</td>
+<td>Media de (fin − inicio) de las atenciones</td>
+<td>min</td>
+<td>Base para R11</td>
+</tr>
+</tbody>
+</table>
+<h3>7.3 Integridad del registro</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definición</th>
+<th>Regla</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Atenciones fuera de horario</td>
+<td>Inicio fuera de <code>[contract_start, contract_end)</code> o en día sin contrato</td>
+<td>R03</td>
+</tr>
+<tr>
+<td>Atenciones solapadas</td>
+<td>Inicio más de 1 minuto antes del fin de la atención anterior del mismo médico</td>
+<td>R04</td>
+</tr>
+<tr>
+<td>Atenciones sin sesión activa</td>
+<td>Inicio fuera de la ventana login–logout del día</td>
+<td>R05</td>
+</tr>
+<tr>
+<td>Días con paciente repetido</td>
+<td>Días con el mismo paciente contabilizado 2 o más veces por el mismo médico</td>
+<td>R06</td>
+</tr>
+<tr>
+<td>Días con pago sobre contrato</td>
+<td>Días con horas pagadas &gt; contratadas</td>
+<td>R07</td>
+</tr>
+<tr>
+<td>Pagos duplicados</td>
+<td>Registros adicionales de pago para el mismo médico y día</td>
+<td>R08</td>
+</tr>
+<tr>
+<td>Bloques pagados sin pacientes</td>
+<td>Días con horas pagadas y cero atenciones</td>
+<td>R09</td>
+</tr>
+<tr>
+<td>Concentración en el turno (<code>edge_concentration</code>)</td>
+<td>Fracción de atenciones que cabe en la mitad contigua más cargada del turno</td>
+<td>R10</td>
+</tr>
+<tr>
+<td>Duración improbable</td>
+<td>Fracción de atenciones con duración &lt; 4 minutos</td>
+<td>R11</td>
+</tr>
+<tr>
+<td>Sin registro clínico</td>
+<td>Fracción de atenciones con <code>has_clinical_record</code> falso</td>
+<td>R12</td>
+</tr>
+<tr>
+<td>Registro retrospectivo</td>
+<td>Fracción con registro creado más de 48 horas después del término</td>
+<td>R13</td>
+</tr>
+</tbody>
+</table>
+<h3>7.4 Comparación con pares</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Fórmula</th>
+<th>Lectura</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Z robusto</td>
+<td>0,6745 × (x − mediana del grupo) / MAD del grupo; si MAD = 0, IQR / 1,349</td>
+<td>Desviación resistente a distribuciones sesgadas</td>
+</tr>
+<tr>
+<td>Percentil en el grupo</td>
+<td>Rango percentil dentro del peer group y mes</td>
+<td>Se muestra en la narrativa</td>
+</tr>
+<tr>
+<td>Dirección de riesgo</td>
+<td>Bajo: pacientes por hora, utilización, duración media. Alto: costo por paciente, ratio ociosas, no-show</td>
+<td>Solo la desviación en la dirección de riesgo suma</td>
+</tr>
+<tr>
+<td>Saturación</td>
+<td>|z| = 3,5 satura el riesgo de la métrica</td>
+<td>Percentil ≈ 99,9</td>
+</tr>
+</tbody>
+</table>
+<h3>7.5 Cambio de comportamiento</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definición</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Línea base propia</td>
+<td>Mediana de pacientes por hora en las primeras 8 semanas del médico</td>
+</tr>
+<tr>
+<td>EWMA</td>
+<td>Media móvil exponencial con α = 0,3 de la serie semanal</td>
+</tr>
+<tr>
+<td>Cambio relativo (<code>rel_change</code>)</td>
+<td>(EWMA − línea base) / línea base, promedio de las semanas del mes</td>
+</tr>
+<tr>
+<td>Alarma CUSUM</td>
+<td>CUSUM unilateral de caídas con deriva 0,5 y umbral 4 desviaciones robustas</td>
+</tr>
+<tr>
+<td>Riesgo de cambio</td>
+<td>Caída relativa / 0,60, saturado en 1; se pondera por 1 si hay alarma CUSUM y por 0,5 si no; cero durante la línea base</td>
+</tr>
+</tbody>
+</table>
+<h3>7.6 Relaciones médico–paciente (grafo)</h3>
+<table>
+<thead>
+<tr>
+<th>Indicador</th>
+<th>Definición</th>
+<th>Señal</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Pacientes compartidos</td>
+<td>Fracción de la cartera del mes que también atendió otro médico</td>
+<td>Riesgo desde máx(2 × mediana del grupo, 25 %) hasta saturar en +50 puntos</td>
+</tr>
+<tr>
+<td>Atenciones simultáneas</td>
+<td>Atenciones del médico que coinciden en el tiempo con una atención de otro médico al mismo paciente</td>
+<td>Satura en 6; 3 o más escalan el caso (G01)</td>
+</tr>
+<tr>
+<td>Concentración de cartera</td>
+<td>Atenciones por paciente en múltiplos de la mediana del grupo; HHI y participación del top 5</td>
+<td>Riesgo desde 2× y saturación en 4×</td>
+</tr>
+<tr>
+<td>Visitas implausibles</td>
+<td>Fracción de la cartera con 4 o más atenciones en el mes</td>
+<td>Satura en 25 %</td>
+</tr>
+<tr>
+<td>Vínculo más fuerte</td>
+<td>Médico con más pacientes en común y su índice de Jaccard</td>
+<td>Se cita en la narrativa</td>
+</tr>
+<tr>
+<td>Comunidad</td>
+<td>Grupo detectado por modularidad sobre aristas con 3 o más pacientes en común</td>
+<td>Tamaño de la comunidad</td>
+</tr>
+</tbody>
+</table>
+<h2>8. Reglas de negocio</h2>
+<p>La intensidad de cada regla vale 0 en el umbral y 1 en el punto de saturación, lineal entre ambos. Las reglas <strong>críticas</strong> escalan el caso por sí solas cuando su intensidad alcanza 0,5.</p>
+<table>
+<thead>
+<tr>
+<th>Código</th>
+<th>Regla</th>
+<th>Variable</th>
+<th>Umbral</th>
+<th>Saturación</th>
+<th>Dimensión</th>
+<th>Crítica</th>
+<th>Qué revisar en auditoría</th>
+<th>Causas legítimas a descartar</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>R01</td>
+<td>Horas pagadas sin actividad clínica</td>
+<td><code>idle_hours_ratio</code></td>
+<td>&gt; 35 %</td>
+<td>60 %</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Distribución horaria de atenciones, tareas no asistenciales pactadas</td>
+<td>Comités, docencia, gestión, bloqueos de agenda autorizados</td>
+</tr>
+<tr>
+<td>R02</td>
+<td>Rendimiento incompatible con lo esperado</td>
+<td><code>performance_ratio</code></td>
+<td>&lt; 0,50</td>
+<td>0,25</td>
+<td>Productividad</td>
+<td>No</td>
+<td>Complejidad de casos, demanda, no-show</td>
+<td>Baja demanda, pacientes complejos, licencias parciales</td>
+</tr>
+<tr>
+<td>R03</td>
+<td>Atenciones fuera del horario contratado</td>
+<td><code>off_schedule_encounters</code></td>
+<td>&gt; 2</td>
+<td>12</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Horas extraordinarias autorizadas, errores de registro</td>
+<td>Extensión de turno aprobada, desfase de reloj del sistema</td>
+</tr>
+<tr>
+<td>R04</td>
+<td>Consultas simultáneas</td>
+<td><code>overlapping_encounters</code></td>
+<td>&gt; 0</td>
+<td>6</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Timestamps de inicio y fin, registro por lotes</td>
+<td>Cierre tardío de fichas en bloque</td>
+</tr>
+<tr>
+<td>R05</td>
+<td>Atención sin sesión activa</td>
+<td><code>encounters_without_login</code></td>
+<td>&gt; 1</td>
+<td>8</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Logs de acceso, delegación de credenciales</td>
+<td>Sesión abierta en otro equipo, falla del log</td>
+</tr>
+<tr>
+<td>R06</td>
+<td>Mismo paciente contabilizado múltiples veces</td>
+<td><code>duplicate_patient_days</code></td>
+<td>&gt; 1</td>
+<td>6</td>
+<td>Actividad</td>
+<td>No</td>
+<td>Procedimientos múltiples legítimos el mismo día</td>
+<td>Control más procedimiento, reingreso</td>
+</tr>
+<tr>
+<td>R07</td>
+<td>Horas pagadas superiores a contratadas</td>
+<td><code>overpaid_days_ratio</code></td>
+<td>&gt; 5 % de los días</td>
+<td>30 %</td>
+<td>Contrato</td>
+<td>Sí</td>
+<td>Anexos de contrato, horas extraordinarias</td>
+<td>Extensión formalizada no cargada en contratos</td>
+</tr>
+<tr>
+<td>R08</td>
+<td>Pagos duplicados</td>
+<td><code>duplicate_payments</code></td>
+<td>&gt; 0</td>
+<td>3</td>
+<td>Contrato</td>
+<td>Sí</td>
+<td>Liquidaciones del período</td>
+<td>Reproceso de nómina con reverso no registrado</td>
+</tr>
+<tr>
+<td>R09</td>
+<td>Bloques pagados sin pacientes</td>
+<td><code>empty_paid_blocks_ratio</code></td>
+<td>&gt; 5 % de los días</td>
+<td>25 %</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Actividad no asistencial del día</td>
+<td>Capacitación, licencia parcial, falla de agenda</td>
+</tr>
+<tr>
+<td>R10</td>
+<td>Actividad concentrada en el turno</td>
+<td><code>edge_concentration</code></td>
+<td>&gt; 70 %</td>
+<td>95 %</td>
+<td>Actividad</td>
+<td>No</td>
+<td>Patrón de llegada de pacientes</td>
+<td>Demanda concentrada por diseño de agenda</td>
+</tr>
+<tr>
+<td>R11</td>
+<td>Duración físicamente improbable</td>
+<td><code>improbable_duration_ratio</code></td>
+<td>&gt; 10 %</td>
+<td>30 %</td>
+<td>Actividad</td>
+<td>No</td>
+<td>Definición de inicio y fin en el sistema</td>
+<td>Registro del cierre inmediato tras la atención real</td>
+</tr>
+<tr>
+<td>R12</td>
+<td>Atenciones sin registro clínico</td>
+<td><code>missing_record_ratio</code></td>
+<td>&gt; 10 %</td>
+<td>30 %</td>
+<td>Actividad</td>
+<td>Sí</td>
+<td>Existencia de evolución, receta o indicación</td>
+<td>Registro en sistema paralelo no integrado</td>
+</tr>
+<tr>
+<td>R13</td>
+<td>Registro clínico retrospectivo</td>
+<td><code>retro_record_ratio</code></td>
+<td>&gt; 10 %</td>
+<td>30 %</td>
+<td>Actividad</td>
+<td>No</td>
+<td>Fecha de creación versus fecha de atención</td>
+<td>Regularización masiva tras caída del sistema</td>
+</tr>
+<tr>
+<td>G01</td>
+<td>Mismo paciente, dos médicos, mismo instante</td>
+<td><code>simultaneous_encounters</code></td>
+<td>≥ 3</td>
+<td>—</td>
+<td>Grafo</td>
+<td>Sí</td>
+<td>Ambas fichas, agenda y logs de los dos médicos</td>
+<td>Atención conjunta documentada (interconsulta simultánea)</td>
+</tr>
+</tbody>
+</table>
+<p>R02 no es crítica por diseño: el bajo rendimiento por sí solo admite explicaciones legítimas. Lo que lo vuelve relevante es su combinación con horas ociosas, desviación frente a pares o caída sostenida.</p>
+<h2>9. Risk Score y niveles</h2>
+<h3>9.1 Dimensiones</h3>
+<table>
+<thead>
+<tr>
+<th>Dimensión</th>
+<th>Peso</th>
+<th>Cómo se construye</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>ContractRisk</td>
+<td>0,18</td>
+<td>Máximo entre reglas R07 y R08 y la intensidad de conciliación (monto sobre contrato o duplicado / pago total, satura en 15 %)</td>
+</tr>
+<tr>
+<td>ActivityRisk</td>
+<td>0,22</td>
+<td>0,6 × máxima intensidad ponderada + 0,4 × media de las reglas activas de actividad e integridad</td>
+</tr>
+<tr>
+<td>ProductivityRisk</td>
+<td>0,18</td>
+<td>Máximo entre R02 y (0,7 × riesgo de cambio + 0,3 × R02)</td>
+</tr>
+<tr>
+<td>PeerRisk</td>
+<td>0,18</td>
+<td>0,6 × máximo + 0,4 × media de las desviaciones en dirección de riesgo, atenuado al 50 % con menos de 5 pares</td>
+</tr>
+<tr>
+<td>AnomalyRisk</td>
+<td>0,14</td>
+<td>0,6 × Isolation Forest + 0,4 × LOF, cada uno llevado a 0-1 entre mediana + 2 MAD y mediana + 6 MAD</td>
+</tr>
+<tr>
+<td>GraphRisk</td>
+<td>0,10</td>
+<td>0,6 × máximo + 0,4 × media de las cuatro señales de grafo</td>
+</tr>
+</tbody>
+</table>
+<h3>9.2 Fórmula</h3>
+<pre><code>Score ponderado = 0,18·Contract + 0,22·Activity + 0,18·Productivity + 0,18·Peer + 0,14·Anomaly + 0,10·Graph
+</code></pre>
+<p><strong>Escalamiento crítico.</strong> Si alguna regla crítica alcanza intensidad ≥ 0,5, o G01 se activa, el score final es al menos 60 y sobre ese piso conserva el orden del score ponderado: <code>60 + ponderado × 0,40</code>.</p>
+<p><strong>Consolidación por médico.</strong> <code>máx(0,75 × peor mes + 0,25 × promedio de meses, último mes)</code>. La persistencia pesa y la recencia manda.</p>
+<h3>9.3 Niveles y acciones</h3>
+<table>
+<thead>
+<tr>
+<th>Nivel</th>
+<th>Score</th>
+<th>Etiqueta</th>
+<th>Acción sugerida</th>
+<th>Plazo orientativo</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>0</td>
+<td>0–20</td>
+<td>Normal</td>
+<td>Sin acción</td>
+<td>—</td>
+</tr>
+<tr>
+<td>1</td>
+<td>20–40</td>
+<td>Anomalía operacional</td>
+<td>Monitoreo en el próximo ciclo de pago</td>
+<td>Siguiente corrida</td>
+</tr>
+<tr>
+<td>2</td>
+<td>40–60</td>
+<td>Posible error administrativo</td>
+<td>Revisión administrativa de agenda, contrato y registro</td>
+<td>15 días</td>
+</tr>
+<tr>
+<td>3</td>
+<td>60–75</td>
+<td>Posible pago indebido</td>
+<td>Revisión de pagos y solicitud de descargos al profesional</td>
+<td>10 días</td>
+</tr>
+<tr>
+<td>4</td>
+<td>75–100</td>
+<td>Requiere auditoría</td>
+<td>Auditoría formal con reconstrucción de actividad y cruce de fuentes</td>
+<td>Inmediato</td>
+</tr>
+</tbody>
+</table>
+<h3>9.4 Cómo leer la narrativa</h3>
+<p>Ejemplo: <em>"Riesgo requiere auditoría — 86/100. Médico en percentil 99 de costo por paciente dentro de su peer group (n=8). El 50 % de las horas pagadas no presenta actividad clínica registrada (45,0 h; $1.773.000 sin respaldo). El rendimiento cayó 59 % respecto de su propio histórico, con señal CUSUM de cambio sostenido. Caso escalado a nivel ≥ 3 por regla crítica (R01)."</em></p>
+<p>Cada frase corresponde a una capa: pares, actividad, cambio, escalamiento. El auditor debe verificar en la fuente primaria cada afirmación antes de concluir.</p>
+<h2>10. Calibración con data real</h2>
+<ol>
+<li>Correr el modelo sobre un período cerrado de al menos seis meses.</li>
+<li>Revisar <code>period_features</code> y la pestaña de perfil de pares: la mayoría de los médicos debe quedar en nivel 0 o 1. Si más del 10 % queda en nivel 2 o superior sin evidencia, subir los umbrales de las reglas que más disparan.</li>
+<li>Ajustar <code>expected_rate</code> por peer group con el área clínica.</li>
+<li>Verificar que los peer groups tengan al menos cinco médicos; de lo contrario, agrupar.</li>
+<li>Documentar cada cambio de parámetro. La corrida guarda la configuración usada en la base de casos y en <code>config_used.json</code>.</li>
+<li>Auditar los casos de nivel 3 y 4 y registrar el resultado en la sección 6. Con 20 casos cerrados y 5 por clase se habilita la capa supervisada.</li>
+<li>Revisar trimestralmente los pesos del score con los resultados de auditoría.</li>
+</ol>
+<h2>11. Ciclo de auditoría y gestión de casos</h2>
+<table>
+<thead>
+<tr>
+<th>Estado</th>
+<th>Significado</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>PENDIENTE</td>
+<td>Priorizado por el modelo, sin revisión</td>
+</tr>
+<tr>
+<td>EN_REVISION</td>
+<td>Asignado a un auditor</td>
+</tr>
+<tr>
+<td>CERRADO</td>
+<td>Con resultado registrado</td>
+</tr>
+</tbody>
+</table>
+<table>
+<thead>
+<tr>
+<th>Resultado</th>
+<th>Etiqueta para la capa supervisada</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>NORMAL</td>
+<td>0</td>
+</tr>
+<tr>
+<td>ERROR_ADMINISTRATIVO</td>
+<td>0</td>
+</tr>
+<tr>
+<td>PAGO_INDEBIDO_CONFIRMADO</td>
+<td>1</td>
+</tr>
+<tr>
+<td>ABUSO</td>
+<td>1</td>
+</tr>
+<tr>
+<td>FRAUDE_CONFIRMADO</td>
+<td>1</td>
+</tr>
+</tbody>
+</table>
+<p>Todas las decisiones quedan en historial con auditor, fecha, comentario, score y nivel al momento de la decisión y corrida de origen.</p>
+<h2>12. Reportería</h2>
+<table>
+<thead>
+<tr>
+<th>Formato</th>
+<th>Contenido</th>
+<th>Destinatario</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>HTML imprimible</td>
+<td>Resumen, distribución por nivel con gráficos, ranking, fichas de hallazgos, relaciones, metodología</td>
+<td>Comité, dirección</td>
+</tr>
+<tr>
+<td>Markdown</td>
+<td>Mismo contenido en texto</td>
+<td>Repositorio, trazabilidad</td>
+</tr>
+<tr>
+<td>Excel (5 hojas)</td>
+<td>Resumen, hallazgos, alertas, ranking, médico-períodos</td>
+<td>Equipo de auditoría, Google Sheets</td>
+</tr>
+<tr>
+<td>CSV de hallazgos</td>
+<td>Una fila por médico priorizado con todas las evidencias</td>
+<td>Integración con otros sistemas</td>
+</tr>
+<tr>
+<td>ZIP</td>
+<td>Todas las tablas intermedias, informe y configuración</td>
+<td>Archivo de la corrida</td>
+</tr>
+</tbody>
+</table>
+<h2>13. Gobernanza, límites y buenas prácticas</h2>
+<ul>
+<li>Denominación: "Modelo de Payment Integrity y detección de anomalías en pagos médicos". Evitar "modelo de fraude" en comunicaciones con profesionales.</li>
+<li>Los datos de pago y actividad clínica se procesan dentro del perímetro institucional. No usar la demostración pública con datos reales.</li>
+<li>El proxy de "hora con actividad" se basa en atenciones registradas; con eventos del sistema (apertura de ficha, prescripción, firma) puede refinarse.</li>
+<li>La detección de atenciones simultáneas depende de timestamps precisos; con relojes o registros imprecisos, aumentar la tolerancia en la configuración de grafo.</li>
+<li>La capa supervisada con menos de 60 auditorías es orientativa. Nunca sustituye la revisión.</li>
+<li>Los umbrales y pesos por defecto provienen de juicio experto y validación sobre data sintética; su validez en producción depende de la calibración descrita en la sección 10.</li>
+</ul>
+<h2>14. Anexo · Parámetros de configuración por defecto</h2>
+<table>
+<thead>
+<tr>
+<th>Grupo</th>
+<th>Parámetro</th>
+<th>Valor</th>
+</tr>
+</thead>
+<tbody>
+<tr>
+<td>Reglas</td>
+<td>Umbrales R01–R13</td>
+<td>Ver sección 8</td>
+</tr>
+<tr>
+<td>Pares</td>
+<td>Métricas comparadas</td>
+<td>pacientes por hora, utilización, costo por paciente, ratio ociosas, duración media, no-show</td>
+</tr>
+<tr>
+<td>Pares</td>
+<td>Saturación z; mínimo de pares</td>
+<td>3,5; 5</td>
+</tr>
+<tr>
+<td>Anomalías</td>
+<td>Contaminación; árboles; vecinos LOF</td>
+<td>0,06; 400; 15</td>
+</tr>
+<tr>
+<td>Anomalías</td>
+<td>Normalización</td>
+<td>mediana + 2 MAD → 0; mediana + 6 MAD → 1</td>
+</tr>
+<tr>
+<td>Cambio</td>
+<td>α EWMA; semanas base; umbral y deriva CUSUM; saturación de caída</td>
+<td>0,3; 8; 4 y 0,5; 60 %</td>
+</tr>
+<tr>
+<td>Grafo</td>
+<td>Tolerancia simultaneidad; saturación simultáneas; saturación compartidos</td>
+<td>0 min; 6; +50 puntos</td>
+</tr>
+<tr>
+<td>Grafo</td>
+<td>Visitas implausibles; saturación fracción; compuerta concentración; mínimo comunidad</td>
+<td>4; 25 %; 2×; 3</td>
+</tr>
+<tr>
+<td>Scoring</td>
+<td>Pesos</td>
+<td>0,18 / 0,22 / 0,18 / 0,18 / 0,14 / 0,10</td>
+</tr>
+<tr>
+<td>Scoring</td>
+<td>Intensidad crítica; piso; G01</td>
+<td>0,5; 60; 3 atenciones</td>
+</tr>
+<tr>
+<td>Supervisada</td>
+<td>Mínimo de etiquetas; mínimo por clase</td>
+<td>20; 5</td>
+</tr>
+</tbody>
+</table>
+<p>Todos los valores viven en <code>payment_integrity/config.py</code>.</p></body></html>
