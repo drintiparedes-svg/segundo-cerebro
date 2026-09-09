@@ -26,6 +26,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [10 · Agentes y privacidad](docs/10-agentes-y-privacidad.md) | curador de archivos + triaje de correo; modelo de privacidad |
 | [11 · Áreas y tu día](docs/11-areas-y-tu-dia.md) | mapa de áreas (clasificación 100% local) + brief diario `sb today` |
 | [12 · Mapa de decisiones](docs/12-mapa-de-decisiones.md) | `sb why`: por qué se tomó cada decisión, con su cadena y evidencia |
+| [13 · Writing agent](docs/13-writing-agent.md) | `sb draft`: borradores de informes y documentos desde tu memoria |
 
 ## Quickstart
 
@@ -42,6 +43,7 @@ sb areas                    # tus áreas de trabajo con sus conteos
 sb today                    # brief del día: agenda, compromisos, correo, preguntas
 sb why "tema"               # por qué se tomó una decisión: cadena, evidencia, pendientes
 sb literature "HPV self-sampling" --open-only   # literatura abierta (Europe PMC) a la memoria
+sb draft onepager --topic "tema"                # borrador desde tu memoria (revisión humana siempre)
 ```
 
 ### Conectar las carpetas de tu escritorio (solo lectura)

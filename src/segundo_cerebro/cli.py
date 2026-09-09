@@ -362,6 +362,32 @@ def cmd_today(args) -> int:
     return 0
 
 
+def cmd_draft(args) -> int:
+    from .agents.writer import draft, list_templates, save_draft
+
+    if args.list:
+        for kind in list_templates():
+            print(kind)
+        return 0
+    if not args.kind or not args.topic:
+        print("Uso: sb draft <tipo> --topic \"tema\"  (tipos: sb draft --list)",
+              file=sys.stderr)
+        return 1
+    store = _store(args)
+    try:
+        markdown, mode = draft(store, args.kind, args.topic, area=args.area,
+                               prefer_llm=not args.no_llm)
+    except FileNotFoundError as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    path = save_draft(_brain_dir(args), args.kind, markdown)
+    print(markdown)
+    print(f"\n---\nBorrador ({'redactado con Claude' if mode == 'claude' else 'andamiaje local'}) "
+          f"guardado en {path}")
+    print("Revísalo y edítalo antes de usarlo: este agente nunca envía nada.")
+    return 0
+
+
 def cmd_literature(args) -> int:
     from .connectors.literature import sync
     from .extract import get_extractor
@@ -483,6 +509,14 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("today", help="brief del día: agenda, compromisos, correo, preguntas")
     p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
     p.set_defaults(func=cmd_today)
+
+    p = sub.add_parser("draft", help="borrador de documento desde tu memoria (revisión humana siempre)")
+    p.add_argument("kind", nargs="?", help="onepager | informe-academico | plan-trabajo | minuta | informe-gestion")
+    p.add_argument("--topic", help="tema del documento")
+    p.add_argument("--area", help="limitar el material a un área (id de areas.md)")
+    p.add_argument("--list", action="store_true", help="lista las plantillas")
+    p.add_argument("--no-llm", action="store_true", help="andamiaje 100% local")
+    p.set_defaults(func=cmd_draft)
 
     p = sub.add_parser("literature", help="literatura abierta (Europe PMC) a la memoria")
     p.add_argument("query", help="búsqueda, p. ej. 'HPV self-sampling packaging'")
