@@ -110,28 +110,23 @@ def context_payload(store, params: dict) -> dict:
 
 
 def areas_payload(store, params: dict) -> list:
-    """Áreas de trabajo con sus conteos. El mapa se lee del vault local."""
+    """Áreas rankeadas por prioridad (automática × validación manual)."""
     from .areas import load_areas
+    from .priority import area_scores, signals_label
     if store is None:
         return []
     counts = store.area_counts()
+    brain_dir = Path(getattr(store, "db_path", Path(".brain/brain.db"))).parent
     out = []
-    for area in load_areas():
-        c = counts.get(area.id, {})
+    for row in area_scores(store, load_areas(), brain_dir):
+        c = counts.get(row["id"], {})
         out.append({
-            "id": area.id, "name": area.name,
+            **row,
+            "signals_label": signals_label(row["signals"]),
             "documents": c.get("documents", 0), "kos": c.get("kos", 0),
             "tasks_open": c.get("tasks_open", 0),
             "decisions": c.get("decisions", 0),
-            "people": area.people, "projects": area.projects,
         })
-    sin = counts.get("_sin_area", {})
-    if sin.get("documents") or sin.get("kos"):
-        out.append({"id": "_sin_area", "name": "Sin área",
-                    "documents": sin.get("documents", 0), "kos": sin.get("kos", 0),
-                    "tasks_open": sin.get("tasks_open", 0),
-                    "decisions": sin.get("decisions", 0),
-                    "people": [], "projects": []})
     return out
 
 
@@ -179,6 +174,81 @@ def dispatch(store, path: str, params: dict) -> tuple[int, object]:
     if not handler:
         return 404, {"error": "not found"}
     return 200, handler(store, params)
+
+
+# ── rutas POST (solo servidor local) ──────────────────────────────────────
+
+def override_area(store, params: dict, body: bytes) -> tuple[int, object]:
+    from .priority import set_override
+    try:
+        data = json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return 400, {"error": "JSON inválido"}
+    area_id = data.get("id")
+    if not area_id:
+        return 400, {"error": "falta id de área"}
+    brain_dir = Path(getattr(store, "db_path", Path(".brain/brain.db"))).parent
+    entry = set_override(
+        brain_dir, area_id,
+        weight=data.get("weight"), pin=data.get("pin"),
+        unpin=bool(data.get("unpin")), status=data.get("status"),
+    )
+    return 200, {"id": area_id, "override": entry,
+                 "areas": areas_payload(store, {})}
+
+
+def upload_document(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Subida manual: guarda el archivo en .brain/uploads/, lo parsea con los
+    lectores locales, lo ingesta y lo clasifica. Todo en la máquina local."""
+    from .areas import load_areas
+    from .connectors.localfs import file_to_document, read_file_text
+    from .extract import HeuristicExtractor
+    from .ingest import new_summary, process_document
+    from .areas import assign_all
+
+    filename = Path(params.get("filename", "documento.txt")).name
+    if not filename or not body:
+        return 400, {"error": "falta archivo o nombre (header X-Filename)"}
+    brain_dir = Path(getattr(store, "db_path", Path(".brain/brain.db"))).parent
+    uploads = brain_dir / "uploads"
+    uploads.mkdir(parents=True, exist_ok=True)
+    dest = uploads / filename
+    n = 1
+    while dest.exists():
+        dest = uploads / f"{Path(filename).stem}-{n}{Path(filename).suffix}"
+        n += 1
+    dest.write_bytes(body)
+
+    text = read_file_text(dest)
+    if text is None or not text.strip():
+        return 415, {"error": f"formato no soportado o vacío: {dest.suffix}"}
+    doc = file_to_document(dest, "subida-manual", text)
+    if not store.add_document(doc):
+        return 200, {"duplicate": True,
+                     "message": "El documento ya estaba en la memoria."}
+    summary = new_summary(HeuristicExtractor())
+    process_document(store, doc, HeuristicExtractor(), summary)
+    areas = load_areas()
+    if areas:
+        assign_all(store, areas)
+        doc = store.get_document(doc.id)
+    return 200, {"title": doc.title, "area": doc.area, "path": str(dest),
+                 "kos": summary["knowledge_objects"]}
+
+
+POST_ROUTES = {
+    "/api/areas/override": override_area,
+    "/api/upload": upload_document,
+}
+
+
+def dispatch_post(store, path: str, params: dict, body: bytes) -> tuple[int, object]:
+    handler = POST_ROUTES.get(path)
+    if not handler:
+        return 404, {"error": "not found"}
+    if store is None:
+        return 503, {"error": "sin memoria activa"}
+    return handler(store, params, body)
 
 
 def json_bytes(payload) -> bytes:

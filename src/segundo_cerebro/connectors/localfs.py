@@ -17,7 +17,7 @@ from pathlib import Path
 
 from ..models import Document, new_id, now_iso
 
-TEXT_EXTS = {".md", ".txt", ".csv", ".json"}
+TEXT_EXTS = {".md", ".txt", ".csv", ".json", ".vtt", ".srt"}
 OPTIONAL_EXTS = {".pdf", ".docx", ".xlsx", ".pptx", ".html", ".htm"}
 SKIP_DIRS = {".git", ".brain", "node_modules", "__pycache__", ".venv",
              "$RECYCLE.BIN", "System Volume Information"}
@@ -171,12 +171,19 @@ def _html_to_text(path: Path) -> str | None:
 
 
 def file_to_document(path: Path, source_alias: str, body: str) -> Document:
+    from .transcripts import looks_like_transcript, parse_transcript
+
     mtime = datetime.fromtimestamp(path.stat().st_mtime, tz=timezone.utc)
+    doc_type, people = "note", []
+    if path.suffix.lower() in (".vtt", ".srt") or \
+            looks_like_transcript(body, path.parts):
+        doc_type = "meeting"
+        people, body = parse_transcript(body)
     return Document(
         id=new_id("doc"),
         path=str(path),
         title=path.stem,
-        doc_type="note",
+        doc_type=doc_type,
         date=mtime.date().isoformat(),
         body=body[:MAX_BODY_CHARS],
         metadata={
@@ -184,6 +191,7 @@ def file_to_document(path: Path, source_alias: str, body: str) -> Document:
             "source_alias": source_alias,
             "extension": path.suffix.lower(),
             "modified_time": mtime.isoformat(),
+            **({"people": people} if people else {}),
         },
     )
 

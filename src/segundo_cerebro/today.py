@@ -20,10 +20,16 @@ MESES = ["enero", "febrero", "marzo", "abril", "mayo", "junio", "julio",
 
 def build_today(store, brain_dir: str | Path, areas: list[Area],
                 horizon_days: int = 3) -> str:
+    from .priority import area_scores
+
     today = date.today()
     horizon = today + timedelta(days=horizon_days)
     area_names = {a.id: a.name for a in areas}
     name_of = lambda aid: area_names.get(aid, "Sin área")
+    # prioridad validada: define el orden de las secciones por área
+    area_rank = {r["id"]: r["rank"]
+                 for r in area_scores(store, areas, brain_dir)} if areas else {}
+    rank_of = lambda aid: area_rank.get(aid, 999)
 
     fecha = (f"{DIAS[today.weekday()]} {today.day} de "
              f"{MESES[today.month - 1]} de {today.year}")
@@ -63,7 +69,7 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
         by_area: dict = {}
         for t in tasks:
             by_area.setdefault(t.area, []).append(t)
-        for aid, items in sorted(by_area.items(), key=lambda kv: name_of(kv[0])):
+        for aid, items in sorted(by_area.items(), key=lambda kv: rank_of(kv[0])):
             lines.append(f"### {name_of(aid)}")
             for t in sorted(items, key=lambda x: x.date, reverse=True)[:8]:
                 lines.append(f"- {t.statement} ({t.date})")
@@ -89,7 +95,7 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
     questions = store.list_knowledge_objects(ko_type="question", status="active", limit=10)
     if questions:
         lines.append("## Sin resolver")
-        for q in questions:
+        for q in sorted(questions, key=lambda q: rank_of(q.area)):
             lines.append(f"- {q.statement} [{name_of(q.area)}]")
         lines.append("")
 

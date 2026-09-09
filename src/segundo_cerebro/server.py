@@ -11,7 +11,7 @@ from urllib.parse import parse_qs, urlparse
 
 from .store import BrainStore
 from .ui import render_page
-from .webapi import dispatch, json_bytes
+from .webapi import dispatch, dispatch_post, json_bytes
 
 
 class BrainHandler(BaseHTTPRequestHandler):
@@ -29,6 +29,19 @@ class BrainHandler(BaseHTTPRequestHandler):
             self._respond(status, json_bytes(payload),
                           "application/json; charset=utf-8")
         except Exception as exc:  # el servidor local no debe caerse por una request
+            self._respond(500, json_bytes({"error": str(exc)}), "application/json")
+
+    def do_POST(self) -> None:  # noqa: N802
+        url = urlparse(self.path)
+        params = {k: v[0] for k, v in parse_qs(url.query).items()}
+        params["filename"] = self.headers.get("X-Filename", "")
+        length = int(self.headers.get("Content-Length", 0))
+        body = self.rfile.read(min(length, 30_000_000)) if length else b""
+        try:
+            status, payload = dispatch_post(self.store, url.path, params, body)
+            self._respond(status, json_bytes(payload),
+                          "application/json; charset=utf-8")
+        except Exception as exc:
             self._respond(500, json_bytes({"error": str(exc)}), "application/json")
 
     def log_message(self, fmt: str, *args) -> None:

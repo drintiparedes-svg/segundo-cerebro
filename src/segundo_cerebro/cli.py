@@ -317,21 +317,65 @@ def _auto_assign(args, store) -> None:
 
 def cmd_areas(args) -> int:
     from .areas import load_areas
+    from .priority import area_scores, signals_label
     areas = load_areas()
     if not areas:
         print("No existe brain/self/areas.md — crea tu mapa de áreas primero.",
               file=sys.stderr)
         return 1
-    counts = _store(args).area_counts()
-    print(f"{'Área':32} {'docs':>5} {'KOs':>5} {'tareas':>7} {'decis.':>7}")
-    for a in areas:
-        c = counts.get(a.id, {})
-        print(f"{a.name:32} {c.get('documents', 0):>5} {c.get('kos', 0):>5} "
-              f"{c.get('tasks_open', 0):>7} {c.get('decisions', 0):>7}")
-    sin = counts.get("_sin_area", {})
-    if sin:
-        print(f"{'(sin área)':32} {sin.get('documents', 0):>5} {sin.get('kos', 0):>5}")
+    rows = area_scores(_store(args), areas, _brain_dir(args))
+    print(f"{'#':>2} {'Área':32} {'score':>6} {'peso':>5}  señales")
+    for r in rows:
+        mark = f"📌{r['pin']}" if r["pin"] is not None else (
+            "⏸" if r["status"] == "pausada" else "  ")
+        print(f"{r['rank']:>2} {r['name']:32} {r['score']:>6} {r['weight']:>5} "
+              f"{mark} {signals_label(r['signals'])}")
+    print("\nAjustes: sb areas set <id> --weight W | --pin N | --pause · "
+          "interactivo: sb areas review")
     return 0
+
+
+def cmd_areas_set(args) -> int:
+    from .priority import set_override
+    entry = set_override(_brain_dir(args), args.id, weight=args.weight,
+                         pin=args.pin, unpin=args.unpin,
+                         status="pausada" if args.pause else
+                                ("activa" if args.resume else None))
+    print(f"{args.id}: {entry}")
+    return cmd_areas(args)
+
+
+def cmd_areas_review(args) -> int:
+    from .areas import load_areas
+    from .priority import area_scores, set_override, signals_label
+    areas = load_areas()
+    store = _store(args)
+    brain_dir = _brain_dir(args)
+    print("Revisión de prioridades — Enter acepta · w <n> ajusta peso · "
+          "p <n> fija posición · x pausa · q termina\n")
+    for r in area_scores(store, areas, brain_dir):
+        prompt = (f"#{r['rank']} {r['name']} (score {r['score']}, "
+                  f"{signals_label(r['signals'])}) > ")
+        try:
+            answer = input(prompt).strip().lower()
+        except EOFError:
+            break
+        if answer == "q":
+            break
+        if answer == "x":
+            set_override(brain_dir, r["id"], status="pausada")
+        elif answer.startswith("w "):
+            try:
+                set_override(brain_dir, r["id"], weight=float(answer[2:]))
+            except ValueError:
+                print("  peso inválido, se mantiene")
+        elif answer.startswith("p "):
+            try:
+                set_override(brain_dir, r["id"], pin=int(answer[2:]))
+            except ValueError:
+                print("  posición inválida, se mantiene")
+    print("\nRanking validado:")
+    return cmd_areas(args)
 
 
 def cmd_areas_assign(args) -> int:
@@ -360,6 +404,103 @@ def cmd_today(args) -> int:
         path = save_report(_brain_dir(args), "brief", brief)
         print(f"\nGuardado en {path}")
     return 0
+
+
+def cmd_add(args) -> int:
+    """Subida manual de archivos sueltos desde el notebook (solo lectura)."""
+    import shutil
+    from .connectors.localfs import file_to_document, read_file_text
+    from .extract import get_extractor
+    from .ingest import new_summary, process_document
+
+    store = _store(args)
+    extractor = get_extractor(prefer_llm=not args.no_llm)
+    summary = new_summary(extractor)
+    added = 0
+    for raw in args.paths:
+        path = Path(raw).expanduser()
+        if not path.is_file():
+            print(f"Omitido (no es archivo): {path}", file=sys.stderr)
+            continue
+        if args.copy:
+            uploads = _brain_dir(args) / "uploads"
+            uploads.mkdir(parents=True, exist_ok=True)
+            copied = uploads / path.name
+            shutil.copy2(path, copied)
+            path = copied
+        text = read_file_text(path)
+        if text is None or not text.strip():
+            print(f"Formato no soportado o vacío: {path}", file=sys.stderr)
+            continue
+        doc = file_to_document(path, "subida-manual", text)
+        if args.area:
+            doc.area = args.area
+        if not store.add_document(doc):
+            print(f"Ya estaba en la memoria: {path.name}")
+            continue
+        summary["documents"] += 1
+        process_document(store, doc, extractor, summary)
+        added += 1
+        print(f"Agregado: {doc.title} → {path}")
+    if not args.area:
+        _auto_assign(args, store)
+    print(f"Documentos nuevos: {added} · KOs: {summary['knowledge_objects']}")
+    return 0 if added or not args.paths else 1
+
+
+def cmd_zotero_import(args) -> int:
+    from .connectors.zotero import import_library
+    store = _store(args)
+    try:
+        docs = import_library(store, Path(args.file))
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    _auto_assign(args, store)
+    for doc in docs[:20]:
+        print(f"{doc.metadata.get('year', ''):>4} · {doc.title}")
+    print(f"\nReferencias nuevas en la memoria: {len(docs)}")
+    return 0
+
+
+def cmd_chats_import(args) -> int:
+    from .connectors.chats import import_export
+    from .extract import HeuristicExtractor
+    from .ingest import new_summary, process_document
+
+    store = _store(args)
+    try:
+        docs = import_export(store, Path(args.file), alias=args.alias)
+    except (FileNotFoundError, ValueError) as exc:
+        print(exc, file=sys.stderr)
+        return 1
+    summary = new_summary(HeuristicExtractor())
+    for doc in docs:
+        summary["documents"] += 1
+        process_document(store, doc, HeuristicExtractor(), summary)
+    _auto_assign(args, store)
+    print(f"Días de conversación importados: {len(docs)} · "
+          f"KOs: {summary['knowledge_objects']}")
+    print("Memoria local: el contenido de los chats no sale de tu equipo.")
+    return 0
+
+
+def cmd_literature_verify(args) -> int:
+    from .agents import save_report
+    from .connectors.literature import verify_document
+    from .connectors.localfs import read_file_text
+
+    path = Path(args.file).expanduser()
+    text = read_file_text(path) if path.suffix.lower() not in ("", ".md") \
+        else path.read_text(encoding="utf-8", errors="replace")
+    if not text:
+        print(f"No pude leer {path}", file=sys.stderr)
+        return 1
+    report, ok_count, total = verify_document(text, source_name=path.name)
+    out = save_report(_brain_dir(args), "verificacion", report)
+    print(report)
+    print(f"\nInforme guardado en {out} (el documento original no se toca).")
+    return 0 if ok_count == total else 2
 
 
 def cmd_draft(args) -> int:
@@ -506,9 +647,41 @@ def main(argv: list[str] | None = None) -> int:
     arp = arsub.add_parser("assign", help="re-clasifica toda la memoria por área")
     arp.set_defaults(func=cmd_areas_assign)
 
+    arp = arsub.add_parser("set", help="validación manual: peso, pin o pausa de un área")
+    arp.add_argument("id")
+    arp.add_argument("--weight", type=float)
+    arp.add_argument("--pin", type=int)
+    arp.add_argument("--unpin", action="store_true")
+    arp.add_argument("--pause", action="store_true")
+    arp.add_argument("--resume", action="store_true")
+    arp.set_defaults(func=cmd_areas_set)
+
+    arp = arsub.add_parser("review", help="revisión interactiva del ranking")
+    arp.set_defaults(func=cmd_areas_review)
+
     p = sub.add_parser("today", help="brief del día: agenda, compromisos, correo, preguntas")
     p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
     p.set_defaults(func=cmd_today)
+
+    p = sub.add_parser("add", help="sube archivos sueltos del notebook a la memoria")
+    p.add_argument("paths", nargs="+")
+    p.add_argument("--area", help="forzar área")
+    p.add_argument("--copy", action="store_true", help="copiar a .brain/uploads/")
+    p.add_argument("--no-llm", action="store_true")
+    p.set_defaults(func=cmd_add)
+
+    z = sub.add_parser("zotero", help="biblioteca de referencias (BibTeX / CSL-JSON)")
+    zsub = z.add_subparsers(dest="zotero_command", required=True)
+    zp = zsub.add_parser("import", help="importa un export .bib o .json de Zotero")
+    zp.add_argument("file")
+    zp.set_defaults(func=cmd_zotero_import)
+
+    ch = sub.add_parser("chats", help="exports de WhatsApp (.txt) o Slack (.zip)")
+    chsub = ch.add_subparsers(dest="chats_command", required=True)
+    cp = chsub.add_parser("import")
+    cp.add_argument("file")
+    cp.add_argument("--alias", help="nombre del chat/canal")
+    cp.set_defaults(func=cmd_chats_import)
 
     p = sub.add_parser("draft", help="borrador de documento desde tu memoria (revisión humana siempre)")
     p.add_argument("kind", nargs="?", help="onepager | informe-academico | plan-trabajo | minuta | informe-gestion")
@@ -518,12 +691,18 @@ def main(argv: list[str] | None = None) -> int:
     p.add_argument("--no-llm", action="store_true", help="andamiaje 100% local")
     p.set_defaults(func=cmd_draft)
 
-    p = sub.add_parser("literature", help="literatura abierta (Europe PMC) a la memoria")
-    p.add_argument("query", help="búsqueda, p. ej. 'HPV self-sampling packaging'")
-    p.add_argument("--max", type=int, default=15, help="máx. artículos (default 15)")
-    p.add_argument("--open-only", action="store_true", help="solo open access")
-    p.add_argument("--no-llm", action="store_true")
-    p.set_defaults(func=cmd_literature)
+    p = sub.add_parser("literature", help="literatura: búsqueda abierta y validación de referencias")
+    lsub = p.add_subparsers(dest="literature_command")
+    lp = lsub.add_parser("search", help="busca en Europe PMC y guarda en la memoria")
+    lp.add_argument("query")
+    lp.add_argument("--max", type=int, default=15)
+    lp.add_argument("--open-only", action="store_true")
+    lp.add_argument("--no-llm", action="store_true")
+    lp.set_defaults(func=cmd_literature)
+    lp = lsub.add_parser("verify", help="valida las referencias de un documento (informe, no edita)")
+    lp.add_argument("file")
+    lp.set_defaults(func=cmd_literature_verify)
+    lsub.required = True
 
     p = sub.add_parser("why", help="por qué se tomó una decisión: cadena, evidencia y pendientes")
     p.add_argument("query", help="tema o texto de la decisión")

@@ -27,6 +27,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [11 · Áreas y tu día](docs/11-areas-y-tu-dia.md) | mapa de áreas (clasificación 100% local) + brief diario `sb today` |
 | [12 · Mapa de decisiones](docs/12-mapa-de-decisiones.md) | `sb why`: por qué se tomó cada decisión, con su cadena y evidencia |
 | [13 · Writing agent](docs/13-writing-agent.md) | `sb draft`: borradores de informes y documentos desde tu memoria |
+| [14 · Escalamiento](docs/14-escalamiento.md) | prioridad de áreas, subida de documentos, Zotero/chats/transcripciones, validación de referencias |
 
 ## Quickstart
 
@@ -39,10 +40,15 @@ sb tasks                    # compromisos abiertos
 sb decisions                # decision ledger
 sb timeline                 # memoria episódica
 sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:8765
-sb areas                    # tus áreas de trabajo con sus conteos
+sb areas                    # ranking de áreas por prioridad (auto × validación manual)
+sb areas set falp --pin 1   # validación manual: pin, peso o pausa
+sb add informe.docx         # sube un archivo suelto del notebook
+sb zotero import lib.bib    # tu biblioteca de referencias
+sb chats import export.txt  # WhatsApp/Slack a la memoria episódica
 sb today                    # brief del día: agenda, compromisos, correo, preguntas
 sb why "tema"               # por qué se tomó una decisión: cadena, evidencia, pendientes
-sb literature "HPV self-sampling" --open-only   # literatura abierta (Europe PMC) a la memoria
+sb literature search "HPV self-sampling" --open-only   # literatura abierta a la memoria
+sb literature verify tesis.docx                 # valida referencias (informe [Verificado]/[Discrepancia])
 sb draft onepager --topic "tema"                # borrador desde tu memoria (revisión humana siempre)
 ```
 

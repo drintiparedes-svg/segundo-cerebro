@@ -190,6 +190,30 @@
     color: var(--ink-dim); font-variant-numeric: tabular-nums;
   }
   .area-stats b { color: var(--ink); font-weight: 500; }
+  .area-head { display: flex; align-items: baseline; gap: .5rem; }
+  .area-rank {
+    font-family: "JetBrains Mono", monospace; font-size: .72rem;
+    color: var(--accent); min-width: 1.4rem;
+  }
+  .area-bar {
+    height: 4px; border-radius: 2px; background: var(--line);
+    margin: .45rem 0 .4rem; overflow: hidden;
+  }
+  .area-bar i { display: block; height: 100%; background: var(--accent); }
+  .area-actions { margin-left: auto; display: flex; gap: .25rem; }
+  .area-actions button {
+    background: var(--surface); border: 1px solid var(--line);
+    border-radius: .4rem; color: var(--ink-dim); cursor: pointer;
+    font-size: .72rem; padding: .1rem .45rem;
+  }
+  .area-actions button:hover { color: var(--ink); border-color: var(--accent); }
+  .area-actions button:disabled { opacity: .4; cursor: default; }
+  .dropzone {
+    border: 2px dashed var(--line); border-radius: .8rem;
+    padding: 2.2rem 1rem; text-align: center; color: var(--ink-dim);
+    cursor: pointer; transition: border-color .15s;
+  }
+  .dropzone.over, .dropzone:hover { border-color: var(--accent); color: var(--ink); }
   .ko p { margin: .15rem 0 0; font-size: .88rem; }
   .ko .who { color: var(--ink-dim); font-size: .78rem; margin-top: .15rem; }
 
@@ -272,6 +296,7 @@
     <button data-tab="tasks">Compromisos</button>
     <button data-tab="timeline">Timeline</button>
     <button data-tab="mail">Correo</button>
+    <button data-tab="upload">Subir</button>
     <button data-tab="ask">Preguntar</button>
   </nav>
   <div id="panel-body"></div>
@@ -330,10 +355,14 @@ const DEMO = {
     ],
   },
   areas: [
-    { id: "falp", name: "FALP · Informática Médica", documents: 14, kos: 32, tasks_open: 5, decisions: 7 },
-    { id: "clinica", name: "Clínica · Urología", documents: 6, kos: 11, tasks_open: 2, decisions: 2 },
-    { id: "academia", name: "Academia · MSc", documents: 9, kos: 18, tasks_open: 3, decisions: 4 },
-    { id: "personal", name: "Personal", documents: 4, kos: 6, tasks_open: 1, decisions: 1 },
+    { id: "falp", name: "FALP · Informática Médica", rank: 1, score: 41, weight: 1,
+      signals_label: "5 tareas · 2 eventos 7d · 3 decis. 14d", documents: 14, kos: 32, tasks_open: 5, decisions: 7 },
+    { id: "academia", name: "Academia · MSc", rank: 2, score: 28, weight: 1.25, pin: null,
+      signals_label: "3 tareas · 1 eventos 7d", documents: 9, kos: 18, tasks_open: 3, decisions: 4 },
+    { id: "clinica", name: "Clínica · Urología", rank: 3, score: 14, weight: 1,
+      signals_label: "2 tareas · 1 correo P1-P2", documents: 6, kos: 11, tasks_open: 2, decisions: 2 },
+    { id: "personal", name: "Personal", rank: 4, score: 6, weight: 1,
+      signals_label: "1 tareas", documents: 4, kos: 6, tasks_open: 1, decisions: 1 },
   ],
   mail: [
     { priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
@@ -661,6 +690,18 @@ function renderMail() {
   panelBody.innerHTML = html;
 }
 
+async function overrideArea(id, payload) {
+  if (demoMode) return;
+  try {
+    const res = await fetch("/api/areas/override", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ id, ...payload }),
+    });
+    const data = await res.json();
+    if (data.areas) { areasData = data.areas; renderAreas(); }
+  } catch { /* servidor no disponible */ }
+}
+
 function renderAreas() {
   if (!areasData.length) {
     panelBody.innerHTML = `<h2>Áreas de trabajo</h2>
@@ -668,21 +709,86 @@ function renderAreas() {
       corre <code>sb areas assign</code> (clasificación 100% local).</div>`;
     return;
   }
-  panelBody.innerHTML = `<h2>Áreas de trabajo</h2>` + areasData.map(a => `
-    <div class="area-card">
-      <h3>${esc(a.name)}</h3>
+  const maxScore = Math.max(1, ...areasData.map(a => a.score || 0));
+  panelBody.innerHTML = `<h2>Áreas por prioridad</h2>` + areasData.map(a => `
+    <div class="area-card${a.status === "pausada" ? '" style="opacity:.55' : ''}">
+      <div class="area-head">
+        <span class="area-rank">#${a.rank ?? "·"}${a.pin != null ? " 📌" : ""}</span>
+        <h3>${esc(a.name)}</h3>
+        <div class="area-actions">
+          <button title="Más prioridad" ${demoMode ? "disabled" : ""}
+            onclick="overrideArea('${esc(a.id)}', {weight: ${(a.weight || 1) + 0.25}})">▲</button>
+          <button title="Menos prioridad" ${demoMode ? "disabled" : ""}
+            onclick="overrideArea('${esc(a.id)}', {weight: ${Math.max(0.25, (a.weight || 1) - 0.25)}})">▼</button>
+          <button title="${a.pin != null ? "Soltar pin" : "Fijar arriba"}" ${demoMode ? "disabled" : ""}
+            onclick="overrideArea('${esc(a.id)}', ${a.pin != null ? "{unpin: true}" : "{pin: 1}"})">📌</button>
+        </div>
+      </div>
+      <div class="area-bar"><i style="width:${Math.round(100 * (a.score || 0) / maxScore)}%"></i></div>
       <div class="area-stats">
-        <span><b>${a.documents}</b> docs</span>
-        <span><b>${a.kos}</b> KOs</span>
-        <span><b>${a.tasks_open}</b> tareas</span>
-        <span><b>${a.decisions}</b> decisiones</span>
+        <span>score <b>${a.score ?? 0}</b></span>
+        <span>peso <b>${a.weight ?? 1}</b></span>
+        <span>${esc(a.signals_label || "")}</span>
+      </div>
+      <div class="area-stats" style="margin-top:.25rem">
+        <span><b>${a.documents ?? 0}</b> docs</span>
+        <span><b>${a.kos ?? 0}</b> KOs</span>
+        <span><b>${a.tasks_open ?? 0}</b> tareas</span>
+        <span><b>${a.decisions ?? 0}</b> decisiones</span>
       </div>
     </div>`).join("");
+}
+
+function renderUpload() {
+  panelBody.innerHTML = `<h2>Subir un documento</h2>
+    <div id="dropzone" class="dropzone">Arrastra un archivo aquí<br>
+      <small>o haz clic para elegir — pdf, docx, xlsx, pptx, md, txt, csv, vtt</small>
+    </div>
+    <input id="file-input" type="file" hidden>
+    <div id="upload-result" class="empty">El archivo se guarda y procesa solo
+    en tu máquina (.brain/uploads/); se clasifica por área automáticamente.</div>`;
+  const zone = document.getElementById("dropzone");
+  const input = document.getElementById("file-input");
+  zone.addEventListener("click", () => input.click());
+  zone.addEventListener("dragover", e => { e.preventDefault(); zone.classList.add("over"); });
+  zone.addEventListener("dragleave", () => zone.classList.remove("over"));
+  zone.addEventListener("drop", e => {
+    e.preventDefault(); zone.classList.remove("over");
+    if (e.dataTransfer.files[0]) uploadFile(e.dataTransfer.files[0]);
+  });
+  input.addEventListener("change", () => {
+    if (input.files[0]) uploadFile(input.files[0]);
+  });
+}
+
+async function uploadFile(file) {
+  const out = document.getElementById("upload-result");
+  out.textContent = `Subiendo ${file.name}…`;
+  if (demoMode) {
+    out.textContent = "Modo demo: la subida funciona en tu instancia local (sb serve).";
+    return;
+  }
+  try {
+    const res = await fetch("/api/upload", {
+      method: "POST",
+      headers: { "X-Filename": encodeURIComponent(file.name) },
+      body: await file.arrayBuffer(),
+    });
+    const data = await res.json();
+    if (data.error) { out.textContent = "Error: " + data.error; return; }
+    if (data.duplicate) { out.textContent = "Ese documento ya estaba en la memoria."; return; }
+    out.textContent = `Listo: «${data.title}» → área ${data.area || "sin área"} · ${data.kos} knowledge objects.`;
+    try { areasData = await api("/api/areas"); } catch {}
+    try { graph = await api("/api/graph"); initSim(); } catch {}
+  } catch (err) {
+    out.textContent = "Error subiendo: " + err.message;
+  }
 }
 
 function renderTab() {
   if (selected) return renderNode(selected);
   if (tab === "areas") return renderAreas();
+  if (tab === "upload") return renderUpload();
   if (tab === "mail") return renderMail();
   if (tab === "ask") {
     panelBody.innerHTML = `
