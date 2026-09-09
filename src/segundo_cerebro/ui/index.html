@@ -262,6 +262,21 @@
     font-family: "JetBrains Mono", monospace; line-height: 1.6;
   }
 
+  a.src { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
+  a.src:hover { border-bottom-style: solid; }
+  .doc-back {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: .5rem; color: var(--ink); cursor: pointer;
+    font: inherit; font-size: .78rem; padding: .3rem .7rem; margin-bottom: .7rem;
+  }
+  .doc-back:hover { border-color: var(--accent); }
+  .doc-body {
+    white-space: pre-wrap; overflow-wrap: anywhere;
+    font-size: .85rem; line-height: 1.6; color: var(--ink-dim);
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: .6rem; padding: .8rem .95rem;
+    max-height: 55vh; overflow-y: auto;
+  }
   .demo-note {
     position: fixed; left: 50%; transform: translateX(-50%);
     bottom: 1.2rem; z-index: 20;
@@ -355,15 +370,23 @@ const DEMO = {
     ],
   },
   areas: [
-    { id: "falp", name: "FALP · Informática Médica", rank: 1, score: 41, weight: 1,
+    { id: "falp", name: "FALP · Informática Médica", rank: 1, score: 41, score_auto: 41, weight: 1,
       signals_label: "5 tareas · 2 eventos 7d · 3 decis. 14d", documents: 14, kos: 32, tasks_open: 5, decisions: 7 },
-    { id: "academia", name: "Academia · MSc", rank: 2, score: 28, weight: 1.25, pin: null,
+    { id: "academia", name: "Academia · MSc", rank: 2, score: 28, score_auto: 22.4, weight: 1.25, pin: null,
       signals_label: "3 tareas · 1 eventos 7d", documents: 9, kos: 18, tasks_open: 3, decisions: 4 },
-    { id: "clinica", name: "Clínica · Urología", rank: 3, score: 14, weight: 1,
+    { id: "clinica", name: "Clínica · Urología", rank: 3, score: 14, score_auto: 14, weight: 1,
       signals_label: "2 tareas · 1 correo P1-P2", documents: 6, kos: 11, tasks_open: 2, decisions: 2 },
-    { id: "personal", name: "Personal", rank: 4, score: 6, weight: 1,
+    { id: "personal", name: "Personal", rank: 4, score: 6, score_auto: 6, weight: 1,
       signals_label: "1 tareas", documents: 4, kos: 6, tasks_open: 1, decisions: 1 },
   ],
+  docs: {
+    "demo-minuta": {
+      title: "Minuta — Reunión oncohematología", date: "2026-08-12",
+      doc_type: "meeting", path: "brain/inbox/2026-08-12-reunion-oncohematologia.md",
+      area: "falp", web_link: null,
+      body: "# Reunión gestión clínica — base oncohematológica\n\nParticipantes: Inti, Ricardo, Raimundo.\n\nSe decide avanzar con una base de datos validada para cánceres oncohematológicos, extendiendo ONCODATA. El pipeline del RHC (extracción estructurada con revisión humana) sirve de precedente directo.\n\nCompromisos:\n- Inti: propuesta de variables mínimas.\n- Pendiente: definir estándar de interoperabilidad.\n\n(Documento de ejemplo del modo demo — en tu instancia local este panel abre el archivo real de tu memoria.)",
+    },
+  },
   mail: [
     { priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
       reasons: ["remitente en tu knowledge graph (3 proyectos compartidos)", "lenguaje de plazo"] },
@@ -376,13 +399,13 @@ const DEMO = {
       reasons: ["correo automático/newsletter"] },
   ],
   kos: [
-    { ko_type: "decision", date: "2026-08-12", statement: "Avanzar con una base de datos validada para cánceres oncohematológicos.", people: ["Inti", "Ricardo", "Raimundo"], status: "active", title: "Modelo de captura oncohematológica" },
-    { ko_type: "decision", date: "2026-07-30", statement: "El RHC usará extracción estructurada con revisión humana antes de carga.", people: ["Inti"], status: "active", title: "Pipeline RHC" },
-    { ko_type: "task", date: "2026-08-12", statement: "Preparar propuesta de variables mínimas para la base oncohematológica.", people: ["Inti"], status: "active", title: "Variables mínimas" },
-    { ko_type: "task", date: "2026-08-20", statement: "Enviar borrador de metodología de tesis a supervisión.", people: ["Inti"], status: "active", title: "Metodología tesis" },
-    { ko_type: "event", date: "2026-08-12", statement: "Reunión con Ricardo: aprobación de la base oncohematológica.", people: ["Inti", "Ricardo"], status: "active", title: "Reunión FALP · gestión clínica" },
-    { ko_type: "event", date: "2026-08-28", statement: "Sesión de avance ONCODATA con equipo de datos.", people: ["Inti"], status: "active", title: "Avance ONCODATA" },
-    { ko_type: "question", date: "2026-08-12", statement: "¿Qué estándar de interoperabilidad usará la base oncohematológica?", people: [], status: "active", title: "Estándar pendiente" },
+    { ko_type: "decision", date: "2026-08-12", statement: "Avanzar con una base de datos validada para cánceres oncohematológicos.", people: ["Inti", "Ricardo", "Raimundo"], status: "active", source_doc: "demo-minuta", title: "Modelo de captura oncohematológica" },
+    { ko_type: "decision", date: "2026-07-30", statement: "El RHC usará extracción estructurada con revisión humana antes de carga.", people: ["Inti"], status: "active", source_doc: "demo-minuta", title: "Pipeline RHC" },
+    { ko_type: "task", date: "2026-08-12", statement: "Preparar propuesta de variables mínimas para la base oncohematológica.", people: ["Inti"], status: "active", source_doc: "demo-minuta", title: "Variables mínimas" },
+    { ko_type: "task", date: "2026-08-20", statement: "Enviar borrador de metodología de tesis a supervisión.", people: ["Inti"], status: "active", source_doc: "demo-minuta", title: "Metodología tesis" },
+    { ko_type: "event", date: "2026-08-12", statement: "Reunión con Ricardo: aprobación de la base oncohematológica.", people: ["Inti", "Ricardo"], status: "active", source_doc: "demo-minuta", title: "Reunión FALP · gestión clínica" },
+    { ko_type: "event", date: "2026-08-28", statement: "Sesión de avance ONCODATA con equipo de datos.", people: ["Inti"], status: "active", source_doc: "demo-minuta", title: "Avance ONCODATA" },
+    { ko_type: "question", date: "2026-08-12", statement: "¿Qué estándar de interoperabilidad usará la base oncohematológica?", people: [], status: "active", source_doc: "demo-minuta", title: "Estándar pendiente" },
   ],
 };
 
@@ -402,18 +425,19 @@ const api = async (path) => {
 };
 
 async function loadData() {
+  // Demo solo cuando NO hay backend (vitrina estática). Una memoria local
+  // vacía es modo real: los botones, la subida y la consulta quedan vivos.
   try {
     graph = await api("/api/graph");
     kos = await api("/api/kos");
     try { mail = await api("/api/mail"); } catch { mail = []; }
     try { areasData = await api("/api/areas"); } catch { areasData = []; }
-    if (!graph.nodes.length) throw new Error("empty");
   } catch {
     demoMode = true;
     graph = DEMO.graph;
     kos = DEMO.kos;
     mail = DEMO.mail;
-    areasData = DEMO.areas;
+    areasData = DEMO.areas.map(a => ({ ...a }));
     document.getElementById("demo-note").hidden = false;
   }
   initSim();
@@ -650,9 +674,12 @@ const esc = (s) => String(s ?? "").replace(/[&<>"]/g, c => ({ "&": "&amp;", "<":
 
 function koCard(ko) {
   const who = (ko.people || []).length ? `<div class="who">${esc(ko.people.join(" · "))}</div>` : "";
+  const src = ko.source_doc
+    ? `<div class="who"><a class="src" href="#" onclick="viewDoc('${esc(ko.source_doc)}');return false">ver fuente ↗</a></div>`
+    : "";
   return `<div class="ko">
     <div class="meta"><span class="chip ${esc(ko.ko_type)}">${esc(ko.ko_type)}</span><span>${esc(ko.date)}</span></div>
-    <p>${esc(ko.statement)}</p>${who}
+    <p>${esc(ko.statement)}</p>${who}${src}
   </div>`;
 }
 
@@ -690,8 +717,27 @@ function renderMail() {
   panelBody.innerHTML = html;
 }
 
+function demoOverride(id, payload) {
+  // misma lógica que priority.py, en el navegador: pin asc → score desc
+  const a = areasData.find(x => x.id === id);
+  if (!a) return;
+  if (payload.weight != null) a.weight = payload.weight;
+  if (payload.pin != null) a.pin = payload.pin;
+  if (payload.unpin) a.pin = null;
+  for (const x of areasData) {
+    x.score = Math.round((x.score_auto ?? x.score) * (x.weight ?? 1) * 10) / 10;
+  }
+  areasData.sort((x, y) => {
+    if ((x.pin != null) !== (y.pin != null)) return x.pin != null ? -1 : 1;
+    if (x.pin != null && y.pin != null) return x.pin - y.pin;
+    return (y.score || 0) - (x.score || 0);
+  });
+  areasData.forEach((x, i) => { x.rank = i + 1; });
+  renderAreas();
+}
+
 async function overrideArea(id, payload) {
-  if (demoMode) return;
+  if (demoMode) return demoOverride(id, payload);
   try {
     const res = await fetch("/api/areas/override", {
       method: "POST", headers: { "Content-Type": "application/json" },
@@ -705,8 +751,9 @@ async function overrideArea(id, payload) {
 function renderAreas() {
   if (!areasData.length) {
     panelBody.innerHTML = `<h2>Áreas de trabajo</h2>
-      <div class="empty">Define tu mapa en <code>brain/self/areas.md</code> y
-      corre <code>sb areas assign</code> (clasificación 100% local).</div>`;
+      <div class="empty">Tu memoria está vacía o sin áreas asignadas. Sube un
+      documento en la pestaña <b>Subir</b>, o corre <code>sb ingest brain/</code>
+      y <code>sb areas assign</code> (clasificación 100% local).</div>`;
     return;
   }
   const maxScore = Math.max(1, ...areasData.map(a => a.score || 0));
@@ -716,11 +763,11 @@ function renderAreas() {
         <span class="area-rank">#${a.rank ?? "·"}${a.pin != null ? " 📌" : ""}</span>
         <h3>${esc(a.name)}</h3>
         <div class="area-actions">
-          <button title="Más prioridad" ${demoMode ? "disabled" : ""}
+          <button title="Más prioridad"
             onclick="overrideArea('${esc(a.id)}', {weight: ${(a.weight || 1) + 0.25}})">▲</button>
-          <button title="Menos prioridad" ${demoMode ? "disabled" : ""}
+          <button title="Menos prioridad"
             onclick="overrideArea('${esc(a.id)}', {weight: ${Math.max(0.25, (a.weight || 1) - 0.25)}})">▼</button>
-          <button title="${a.pin != null ? "Soltar pin" : "Fijar arriba"}" ${demoMode ? "disabled" : ""}
+          <button title="${a.pin != null ? "Soltar pin" : "Fijar arriba"}"
             onclick="overrideArea('${esc(a.id)}', ${a.pin != null ? "{unpin: true}" : "{pin: 1}"})">📌</button>
         </div>
       </div>
@@ -765,7 +812,10 @@ async function uploadFile(file) {
   const out = document.getElementById("upload-result");
   out.textContent = `Subiendo ${file.name}…`;
   if (demoMode) {
-    out.textContent = "Modo demo: la subida funciona en tu instancia local (sb serve).";
+    out.innerHTML = `Simulación (demo): «${esc(file.name)}» se guardaría en
+      <code>.brain/uploads/</code>, se ingestaría y se clasificaría por área —
+      todo en tu máquina, nada se envió a ninguna parte. En tu instancia local
+      (<code>sb serve</code>) esta subida es real.`;
     return;
   }
   try {
@@ -783,6 +833,38 @@ async function uploadFile(file) {
   } catch (err) {
     out.textContent = "Error subiendo: " + err.message;
   }
+}
+
+async function viewDoc(id) {
+  const back = `<button class="doc-back" onclick="renderTab()">← volver</button>`;
+  let doc = null;
+  if (demoMode) {
+    doc = DEMO.docs[id] || DEMO.docs["demo-minuta"];
+  } else {
+    panelBody.innerHTML = `${back}<div class="empty">Abriendo documento…</div>`;
+    try {
+      const res = await api("/api/doc?id=" + encodeURIComponent(id));
+      if (!res.found) {
+        panelBody.innerHTML = `${back}<div class="empty">No encontré el documento «${esc(id)}» en la memoria.</div>`;
+        return;
+      }
+      doc = res;
+    } catch (err) {
+      panelBody.innerHTML = `${back}<div class="empty">Error abriendo el documento: ${esc(err.message)}</div>`;
+      return;
+    }
+  }
+  document.getElementById("panel").classList.add("open");
+  panelBody.innerHTML = `${back}
+    <div class="node-type">${esc(doc.doc_type || "documento")}</div>
+    <h2>${esc(doc.title)}</h2>
+    <div class="meta" style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--ink-faint);margin:.2rem 0 .6rem">
+      ${esc(doc.date || "")}${doc.area ? " · área " + esc(doc.area) : ""}
+    </div>
+    ${doc.path ? `<div class="who" style="margin-bottom:.6rem">📄 ${esc(doc.path)}</div>` : ""}
+    ${doc.web_link ? `<div class="who" style="margin-bottom:.6rem"><a class="src" href="${esc(doc.web_link)}" target="_blank" rel="noopener">Abrir enlace externo ↗</a></div>` : ""}
+    <div class="doc-body">${esc(doc.body || "(sin contenido de texto)")}</div>`;
+  panelBody.scrollTop = 0;
 }
 
 function renderTab() {
@@ -828,13 +910,16 @@ async function renderWhy(n) {
       <div id="ask-result">Modo demo — en tu instancia local, este panel
 muestra el dossier completo: evidencia de origen, cadena de decisiones
 previas y posteriores, compromisos derivados y lo que quedó abierto.
-Pruébalo con: sb why "${esc(n.name)}"</div>`;
+Pruébalo con: sb why "${esc(n.name)}"</div>
+      <button class="doc-back" style="margin-top:.7rem" onclick="viewDoc('demo-minuta')">Ver documento de origen (ejemplo) →</button>`;
     return;
   }
   try {
     const res = await api("/api/why?q=" + encodeURIComponent(n.name));
+    const srcDoc = res.decision && res.decision.source_doc;
     panelBody.innerHTML = `<div class="node-type">decisión</div>
-      <div id="ask-result">${esc(res.markdown)}</div>`;
+      <div id="ask-result">${esc(res.markdown)}</div>
+      ${srcDoc ? `<button class="doc-back" style="margin-top:.7rem" onclick="viewDoc('${esc(srcDoc)}')">Ver documento de origen →</button>` : ""}`;
   } catch (err) {
     panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
   }

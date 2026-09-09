@@ -130,6 +130,22 @@ def areas_payload(store, params: dict) -> list:
     return out
 
 
+def doc_payload(store, params: dict) -> dict:
+    """Documento fuente completo, para 'ver la fuente' desde la UI."""
+    doc_id = params.get("id", "")
+    if store is None or not doc_id:
+        return {"found": False}
+    doc = store.get_document(doc_id)
+    if doc is None:
+        return {"found": False}
+    meta = doc.metadata or {}
+    link = meta.get("web_link") or meta.get("html_link") or (
+        f"https://doi.org/{meta['doi']}" if meta.get("doi") else None)
+    return {"found": True, "id": doc.id, "title": doc.title, "date": doc.date,
+            "doc_type": doc.doc_type, "path": doc.path, "area": doc.area,
+            "body": doc.body[:60_000], "web_link": link}
+
+
 def why_payload(store, params: dict) -> dict:
     """Dossier de una decisión: por qué se tomó. 100% local."""
     from .areas import load_areas
@@ -166,6 +182,7 @@ ROUTES = {
     "/api/mail": mail_payload,
     "/api/areas": areas_payload,
     "/api/why": why_payload,
+    "/api/doc": doc_payload,
 }
 
 

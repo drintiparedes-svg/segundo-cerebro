@@ -92,6 +92,33 @@ def test_post_override_and_upload_via_server(store, tmp_path):
         srv.shutdown()
 
 
+# ── acceso a la fuente: GET /api/doc ──────────────────────────────────────
+
+def test_get_doc_via_server(store):
+    import threading
+    from segundo_cerebro.server import BrainHandler
+    from http.server import ThreadingHTTPServer
+
+    handler = type("H", (BrainHandler,), {"store": store})
+    srv = ThreadingHTTPServer(("127.0.0.1", 0), handler)
+    port = srv.server_address[1]
+    threading.Thread(target=srv.serve_forever, daemon=True).start()
+    base = f"http://127.0.0.1:{port}"
+    try:
+        ko = store.list_knowledge_objects(ko_type="decision", limit=1)[0]
+        assert ko.source_doc, "la decisión debe citar su documento"
+        with urllib.request.urlopen(f"{base}/api/doc?id={ko.source_doc}") as resp:
+            doc = json.loads(resp.read())
+        assert doc["found"] and doc["id"] == ko.source_doc
+        assert "oncohem" in doc["body"].lower()
+        assert doc["title"] and doc["path"]
+
+        with urllib.request.urlopen(f"{base}/api/doc?id=doc-inexistente") as resp:
+            assert json.loads(resp.read()) == {"found": False}
+    finally:
+        srv.shutdown()
+
+
 # ── conectores nuevos ─────────────────────────────────────────────────────
 
 BIB = """
