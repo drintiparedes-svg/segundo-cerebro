@@ -29,7 +29,7 @@ areas:
 
   - id: academia
     name: Academia · MSc Imperial
-    keywords: [imperial, tesis, thesis, human-ai, paper, publicación, calibration, trust, nejm, pubmed]
+    keywords: [imperial, tesis, thesis, human-ai, paper, publicación, calibration, trust, nejm, pubmed, vph, hpv, self-sampling, autotoma, packaging, arquetipo, persona, hcd, co-diseño]
     people: []
     projects: [MSc Thesis]
 

@@ -362,6 +362,30 @@ def cmd_today(args) -> int:
     return 0
 
 
+def cmd_literature(args) -> int:
+    from .connectors.literature import sync
+    from .extract import get_extractor
+    from .ingest import new_summary, process_document
+
+    store = _store(args)
+    try:
+        docs = sync(store, args.query, limit=args.max, open_only=args.open_only)
+    except Exception as exc:
+        print(f"Error consultando Europe PMC: {exc}", file=sys.stderr)
+        return 1
+    extractor = get_extractor(prefer_llm=not args.no_llm)
+    summary = new_summary(extractor)
+    for doc in docs:
+        summary["documents"] += 1
+        process_document(store, doc, extractor, summary)
+    _auto_assign(args, store)
+    for doc in docs:
+        oa = "OA" if doc.metadata.get("open_access") else "  "
+        print(f"[{oa}] {doc.metadata.get('year', '')} · {doc.title}")
+    print(f"\nArtículos nuevos: {len(docs)} (deduplicados contra la memoria)")
+    return 0
+
+
 def cmd_why(args) -> int:
     from .agents import save_report
     from .areas import load_areas
@@ -459,6 +483,13 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("today", help="brief del día: agenda, compromisos, correo, preguntas")
     p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
     p.set_defaults(func=cmd_today)
+
+    p = sub.add_parser("literature", help="literatura abierta (Europe PMC) a la memoria")
+    p.add_argument("query", help="búsqueda, p. ej. 'HPV self-sampling packaging'")
+    p.add_argument("--max", type=int, default=15, help="máx. artículos (default 15)")
+    p.add_argument("--open-only", action="store_true", help="solo open access")
+    p.add_argument("--no-llm", action="store_true")
+    p.set_defaults(func=cmd_literature)
 
     p = sub.add_parser("why", help="por qué se tomó una decisión: cadena, evidencia y pendientes")
     p.add_argument("query", help="tema o texto de la decisión")

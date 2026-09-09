@@ -63,7 +63,7 @@ Qué hace cada servicio:
 | Servicio | Qué trae | A qué memoria va |
 |---|---|---|
 | Calendar | eventos ±N días de `primary`, con asistentes y descripción | episódica (KO `event`); asistentes → grafo |
-| Drive | Google Docs (export texto), `.md`, `.txt` nuevos/modificados | document store + semántica |
+| Drive | Google Docs y Sheets (export texto/CSV), `.md`, `.txt`, `.csv`, y binarios `.docx` `.xlsx` `.pptx` `.pdf` (con el extra `[files]`) | document store + semántica |
 
 La sincronización es **incremental e idempotente**: Drive usa un cursor
 `modifiedTime` por cuenta (`.brain/google/state-<alias>.json`) y todo

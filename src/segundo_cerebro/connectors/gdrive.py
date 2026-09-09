@@ -1,8 +1,9 @@
 """Conector Google Drive → document store.
 
-Sincroniza contenido de texto: Google Docs (exportados como texto plano),
-archivos Markdown y .txt. Presentaciones, planillas, PDFs e imágenes quedan
-para una iteración posterior (requieren OCR/parsing dedicado).
+Sincroniza: Google Docs y Google Sheets (exportados como texto/CSV),
+Markdown/txt, y binarios Office y PDF (.docx .xlsx .pptx .pdf, parseados
+con los mismos lectores del conector local — extra [files]). Imágenes y
+videos quedan fuera.
 
 Sincronización incremental: se guarda el último modifiedTime visto por
 cuenta y solo se piden archivos modificados después de ese cursor.
@@ -10,13 +11,29 @@ cuenta y solo se piden archivos modificados después de ese cursor.
 
 from __future__ import annotations
 
+import tempfile
+from pathlib import Path
+
 from ..models import Document, new_id
 from .google_auth import build_service, load_state, save_state
+from .localfs import read_file_text
 
+EXPORT_MIMES = {
+    "application/vnd.google-apps.document": "text/plain",
+    "application/vnd.google-apps.spreadsheet": "text/csv",
+}
+BINARY_MIMES = {
+    "application/vnd.openxmlformats-officedocument.wordprocessingml.document": ".docx",
+    "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet": ".xlsx",
+    "application/vnd.openxmlformats-officedocument.presentationml.presentation": ".pptx",
+    "application/pdf": ".pdf",
+}
 TEXT_MIMES = {
-    "application/vnd.google-apps.document": "gdoc",
+    **{m: "export" for m in EXPORT_MIMES},
+    **{m: "binary" for m in BINARY_MIMES},
     "text/markdown": "text",
     "text/plain": "text",
+    "text/csv": "text",
 }
 MAX_FILES_PER_SYNC = 200
 MAX_BODY_CHARS = 200_000
@@ -46,15 +63,30 @@ def drive_file_to_document(meta: dict, content: str, alias: str) -> Document:
 
 
 def _download(service, meta: dict) -> str | None:
-    fid = meta["id"]
+    fid, mime = meta["id"], meta["mimeType"]
     try:
-        if meta["mimeType"] == "application/vnd.google-apps.document":
+        if mime in EXPORT_MIMES:
             data = service.files().export(
-                fileId=fid, mimeType="text/plain").execute()
+                fileId=fid, mimeType=EXPORT_MIMES[mime]).execute()
         else:
             data = service.files().get_media(fileId=fid).execute()
     except Exception:
-        return None  # archivo sin permiso de export o binario inesperado
+        return None  # archivo sin permiso de export o inesperado
+
+    if mime in BINARY_MIMES:
+        # Reutiliza los lectores del conector local (docx/xlsx/pptx/pdf)
+        # a través de un archivo temporal que se elimina de inmediato.
+        if not isinstance(data, bytes):
+            return None
+        suffix = BINARY_MIMES[mime]
+        with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+            tmp.write(data)
+            tmp_path = Path(tmp.name)
+        try:
+            return read_file_text(tmp_path)
+        finally:
+            tmp_path.unlink(missing_ok=True)
+
     if isinstance(data, bytes):
         try:
             return data.decode("utf-8")

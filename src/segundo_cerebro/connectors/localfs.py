@@ -112,7 +112,7 @@ def read_file_text(path: Path) -> str | None:
             lines = []
             for ws in wb.worksheets:
                 lines.append(f"## Hoja: {ws.title}")
-                for row in ws.iter_rows(max_rows=500, values_only=True):
+                for row in ws.iter_rows(max_row=500, values_only=True):
                     cells = [str(c) for c in row if c is not None]
                     if cells:
                         lines.append(" | ".join(cells))

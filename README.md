@@ -41,6 +41,7 @@ sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:
 sb areas                    # tus áreas de trabajo con sus conteos
 sb today                    # brief del día: agenda, compromisos, correo, preguntas
 sb why "tema"               # por qué se tomó una decisión: cadena, evidencia, pendientes
+sb literature "HPV self-sampling" --open-only   # literatura abierta (Europe PMC) a la memoria
 ```
 
 ### Conectar las carpetas de tu escritorio (solo lectura)

@@ -19,8 +19,11 @@ sobre ≥1 mes de notas reales.
 
 - ✅ Conectores Google Drive + Calendar multi-cuenta
   ([docs/07](07-conectores-google.md))
+- ✅ Drive ampliado: Google Sheets, Excel, Word, PowerPoint y PDF
+- ✅ Conector de literatura abierta (Europe PMC): `sb literature`
+- ✅ Gmail de solo lectura para triaje (docs/10)
 - PostgreSQL + pgvector (búsqueda híbrida BM25 + vectorial)
-- Conectores restantes: Gmail (con filtros), transcripciones de reuniones
+- Conector restante: transcripciones de reuniones
 - Perfil de identidad estructurado en el context pack
 - Registro de feedback operativo (learning loop real)
 - Store cifrado para información sensible; OAuth mínimo privilegio
