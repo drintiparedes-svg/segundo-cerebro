@@ -209,6 +209,25 @@ def today_payload(store, params: dict) -> dict:
     return {"markdown": build_today(store, brain_dir, load_areas())}
 
 
+def status_payload(store, params: dict) -> dict:
+    """Última sincronización, si hay una en curso, tamaño de la memoria y
+    política LLM — para la cabecera de la pestaña Hoy."""
+    from .refresh import status
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"running": False, "last": None, "minutes_ago": None,
+                "counts": {}, "llm": {}, "demo": True}
+    return status(store, brain_dir)
+
+
+def config_payload(store, params: dict) -> dict:
+    from .areas import load_areas
+    from .config import load_config
+    brain_dir = _brain_dir(store)
+    cfg = load_config(brain_dir) if brain_dir else load_config(Path("/nonexistent"))
+    return {"config": cfg, "areas": [{"id": a.id, "name": a.name} for a in load_areas()]}
+
+
 def why_payload(store, params: dict) -> dict:
     """Dossier de una decisión: por qué se tomó. 100% local."""
     from .areas import load_areas
@@ -250,6 +269,8 @@ ROUTES = {
     "/api/sources": sources_payload,
     "/api/sources/suggest": sources_suggest_payload,
     "/api/today": today_payload,
+    "/api/status": status_payload,
+    "/api/config": config_payload,
 }
 
 
@@ -356,8 +377,46 @@ def apply_source(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, {**result, **sources_payload(store, {})}
 
 
+_refresh_threads: dict = {}
+
+
+def start_refresh(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Lanza `sb refresh` en un hilo (no bloquea la UI). Si ya hay uno en
+    curso, lo dice sin duplicar."""
+    import threading
+    from .refresh import is_locked, run_refresh
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return 400, {"error": "sin memoria local (modo demo)"}
+    if is_locked(brain_dir):
+        return 200, {"started": False, "running": True}
+    data = _json_body(body) or {}
+    t = threading.Thread(target=run_refresh, args=(store, brain_dir),
+                         kwargs={"skip": data.get("skip")}, daemon=True)
+    t.start()
+    _refresh_threads[str(brain_dir)] = t
+    return 200, {"started": True, "running": True}
+
+
+def set_llm_config(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Áreas donde se permite Claude. `never` (clinica) no se puede activar
+    desde aquí: el servidor lo rechaza."""
+    from .config import set_llm_areas
+    data = _json_body(body)
+    if data is None or not isinstance(data.get("areas"), list):
+        return 400, {"error": "falta areas (lista)"}
+    brain_dir = _brain_dir(store) or Path(".brain")
+    try:
+        cfg = set_llm_areas(brain_dir, [str(a) for a in data["areas"]])
+    except ValueError as exc:
+        return 403, {"error": str(exc)}
+    return 200, {"config": cfg}
+
+
 POST_ROUTES = {
     "/api/areas/override": override_area,
+    "/api/refresh": start_refresh,
+    "/api/config/llm": set_llm_config,
     "/api/upload": upload_document,
     "/api/people/pin": pin_person,
     "/api/sources/apply": apply_source,

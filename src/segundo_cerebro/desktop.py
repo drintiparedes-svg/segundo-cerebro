@@ -53,6 +53,7 @@ def create_shortcut(desktop: Path, project_dir: Path, port: int = 8765) -> Path:
         path.write_text(
             "@echo off\r\n"
             f'cd /d "{project_dir}"\r\n'
+            f'start "Segundo Cerebro sync" /min "{python}" -m segundo_cerebro.cli refresh --quiet\r\n'
             f'start "Segundo Cerebro" /min "{python}" -m segundo_cerebro.cli serve --port {port}\r\n'
             "timeout /t 2 >nul\r\n"
             f'start "" {url}\r\n',
@@ -69,6 +70,7 @@ def create_shortcut(desktop: Path, project_dir: Path, port: int = 8765) -> Path:
     path.write_text(
         "#!/bin/bash\n"
         f'cd "{project_dir}"\n'
+        f'("{python}" -m segundo_cerebro.cli refresh --quiet >/dev/null 2>&1) &\n'
         f'(sleep 2 && {opener} "{url}") &\n'
         f'exec "{python}" -m segundo_cerebro.cli serve --port {port}\n',
         encoding="utf-8",

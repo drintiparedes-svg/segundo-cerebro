@@ -53,6 +53,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
   ([docs/14](14-escalamiento.md))
 - ✅ Modo activo I: asesor de fuentes (carpetas, Drive, Calendar) y personas
   clave con pin ([docs/15](15-modo-activo.md))
+- ✅ Modo activo II: `sb refresh` programado (`sb schedule`) y extracción
+  con Claude por área (`sb enrich`, `clinica` nunca)
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes

@@ -211,3 +211,142 @@ def test_api_people_sources_today(store, tmp_path):
 
     status, res = dispatch(store, "/api/today", {})
     assert status == 200 and res["markdown"].startswith("# Tu día")
+
+
+# ── Entrega 2: enrich por área, refresh, schedule ─────────────────────────
+
+from segundo_cerebro import scheduler
+from segundo_cerebro.enrich import enrich
+from segundo_cerebro.extract import ExtractionResult, HeuristicExtractor
+from segundo_cerebro.models import KnowledgeObject, new_id
+from segundo_cerebro.refresh import (STEPS, is_locked, last_refresh, lock_path,
+                                     run_refresh, status)
+
+
+class ClaudeExtractor:
+    """Doble de prueba con el mismo nombre de clase que el real: así el
+    marcador `extractor` en metadata se comporta igual que en producción."""
+
+    def extract(self, doc):
+        return ExtractionResult(knowledge_objects=[KnowledgeObject(
+            id=new_id("ko"), ko_type="decision", title="Semántica",
+            statement=f"Decisión semántica extraída de {doc.title}",
+            date=doc.date, people=["Ricardo"], source_doc=doc.id)])
+
+
+def test_enrich_replaces_heuristic_kos_only_in_allowed_areas(store, tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    doc = store.list_documents()[0]
+    assert doc.metadata["extractor"] == "HeuristicExtractor"
+    before = store.list_knowledge_objects(limit=100)
+    assert before and all(k.source_doc == doc.id for k in before)
+
+    assert enrich(store, tmp_path)["skipped"].startswith("sin áreas")
+    set_llm_areas(tmp_path, ["falp"])
+    assert "sin credenciales" in enrich(store, tmp_path)["skipped"]
+    assert enrich(store, tmp_path, areas=["clinica"])["skipped"].startswith("área(s) prohibida")
+    dry = enrich(store, tmp_path, dry_run=True)
+    assert dry["pending"] == 1 and dry["docs"][0]["area"] == "falp"
+
+    result = enrich(store, tmp_path, extractor=ClaudeExtractor())
+    assert result["enriched"] == 1 and result["removed"]["kos"] == len(before)
+    after = store.list_knowledge_objects(limit=100)
+    assert len(after) == 1 and after[0].statement.startswith("Decisión semántica")
+    assert after[0].area == "falp", "la clasificación por área se re-aplica"
+    assert store.get_document(doc.id).metadata["extractor"] == "ClaudeExtractor"
+    assert enrich(store, tmp_path, extractor=ClaudeExtractor())["enriched"] == 0, "idempotente"
+
+
+def test_refresh_runs_steps_in_order_tolerates_errors_and_locks(store, tmp_path):
+    order = []
+
+    def ok(name):
+        def run(store, brain_dir, cfg):
+            order.append(name)
+            return {"n": 1}
+        return run
+
+    def boom(store, brain_dir, cfg):
+        order.append("google")
+        raise RuntimeError("sin red")
+
+    runners = {"sources": ok("sources"), "google": boom, "mail": ok("mail"),
+               "areas": ok("areas"), "enrich": ok("enrich"), "brief": ok("brief")}
+    state = run_refresh(store, tmp_path, runners=runners, skip=["mail"])
+    assert order == ["sources", "google", "areas", "enrich", "brief"]
+    assert state["ok"] is False and state["steps"]["google"]["error"].startswith("RuntimeError")
+    assert state["steps"]["mail"]["skipped"] == "omitido"
+    assert state["steps"]["sources"]["n"] == 1 and state["duration_s"] >= 0
+    assert last_refresh(tmp_path)["started"] == state["started"]
+    assert not is_locked(tmp_path) and list((tmp_path / "logs").glob("refresh-*.log"))
+
+    lock_path(tmp_path).write_text("pid")
+    assert run_refresh(store, tmp_path, runners=runners)["locked"] is True
+    lock_path(tmp_path).unlink()
+
+    st = status(store, tmp_path)
+    assert st["running"] is False and st["counts"]["documents"] == 1
+    assert st["minutes_ago"] == 0 and st["next_due"]
+
+
+def test_refresh_default_runners_without_connectors(store, tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    state = run_refresh(store, tmp_path)
+    assert state["ok"] is True
+    assert state["steps"]["sources"]["skipped"] and state["steps"]["google"]["skipped"]
+    assert state["steps"]["areas"]["documents"] == 1
+    assert "sin" in state["steps"]["enrich"]["skipped"]
+    assert Path(state["steps"]["brief"]["path"]).exists()
+    assert (tmp_path / "state" / "latest-brief.md").read_text(encoding="utf-8").startswith("# Tu día")
+
+
+def test_scheduler_plans_per_platform(tmp_path):
+    assert scheduler.parse_every("4h") == 240 and scheduler.parse_every("90m") == 90
+    assert scheduler.parse_every(2) == 120 and scheduler.parse_every("5m") == 15
+    with pytest.raises(ValueError):
+        scheduler.parse_every("cada rato")
+    proj, db = tmp_path / "proj", str(tmp_path / "proj" / ".brain" / "brain.db")
+    win = scheduler.install(proj, db, "4h", platform="win32", python="py.exe", dry_run=True)
+    assert win["platform"] == "windows" and win["commands"][0][:2] == ["schtasks", "/Create"]
+    assert "/MO" in win["commands"][0] and "240" in win["commands"][0]
+    assert any("ONLOGON" in c for c in win["commands"][1])
+    mac = scheduler.install(proj, db, "2h", platform="darwin", python="/usr/bin/python3",
+                            home=tmp_path, dry_run=True)
+    assert mac["plist"]["StartInterval"] == 7200 and mac["plist"]["RunAtLoad"]
+    assert mac["plist"]["ProgramArguments"][-2:] == ["refresh", "--quiet"]
+    assert mac["plist_path"].startswith(str(tmp_path))
+    lin = scheduler.install(proj, db, "4h", platform="linux", python="/usr/bin/python3", dry_run=True)
+    assert lin["cron_line"].startswith("0 */4 * * * cd ") and lin["cron_line"].endswith(scheduler.CRON_TAG)
+    assert scheduler.remove(platform="darwin", home=tmp_path, dry_run=True)["removed"] is False
+    assert scheduler.status(platform="darwin", home=tmp_path)["installed"] is False
+
+
+def test_desktop_shortcut_refreshes_before_serving(tmp_path, monkeypatch):
+    from segundo_cerebro.desktop import create_shortcut
+    monkeypatch.setattr(sys, "platform", "linux")
+    path = create_shortcut(tmp_path, tmp_path / "proj")
+    text = path.read_text(encoding="utf-8")
+    assert "refresh --quiet" in text and text.index("refresh") < text.index("serve")
+    monkeypatch.setattr(sys, "platform", "win32")
+    text = create_shortcut(tmp_path, tmp_path / "proj").read_text(encoding="utf-8")
+    assert "refresh --quiet" in text and "serve --port" in text
+
+
+def test_api_status_config_and_refresh(store, tmp_path, monkeypatch):
+    monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
+    st, res = dispatch(store, "/api/status", {})
+    assert st == 200 and res["last"] is None and res["running"] is False
+    st, res = dispatch(store, "/api/config", {})
+    assert res["config"]["llm"]["never"] == ["clinica"] and any(a["id"] == "falp" for a in res["areas"])
+
+    st, res = dispatch_post(store, "/api/config/llm", {}, json.dumps({"areas": ["clinica"]}).encode())
+    assert st == 403
+    st, res = dispatch_post(store, "/api/config/llm", {}, json.dumps({"areas": ["academia"]}).encode())
+    assert st == 200 and res["config"]["llm"]["areas"] == ["academia"]
+
+    from segundo_cerebro import webapi
+    st, res = dispatch_post(store, "/api/refresh", {}, b"{}")
+    assert st == 200 and res["started"] is True
+    webapi._refresh_threads[str(tmp_path)].join(timeout=30)
+    st, res = dispatch(store, "/api/status", {})
+    assert res["running"] is False and res["last"]["ok"] is True and res["minutes_ago"] == 0

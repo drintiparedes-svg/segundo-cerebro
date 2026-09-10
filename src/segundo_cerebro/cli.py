@@ -349,6 +349,83 @@ def cmd_people_pin(args) -> int:
     return 0
 
 
+def cmd_refresh(args) -> int:
+    from .refresh import run_refresh
+    say = (lambda m: None) if args.quiet else print
+    if not args.quiet:
+        print("Actualizando el cerebro (todo local; Google solo lectura)…")
+    state = run_refresh(_store(args), _brain_dir(args), skip=args.skip, log=say)
+    if state.get("locked"):
+        print("Ya hay un refresh en curso; no se duplica.", file=sys.stderr)
+        return 0
+    if not args.quiet:
+        print(f"Listo en {state['duration_s']}s · {'sin errores' if state['ok'] else 'con errores (ver .brain/logs/)'}")
+    return 0 if state["ok"] else 1
+
+
+def cmd_schedule(args) -> int:
+    from . import scheduler
+    project_dir = Path.cwd()
+    if args.schedule_command == "install":
+        result = scheduler.install(project_dir, str(Path(args.db).resolve()),
+                                   every=args.every, dry_run=args.dry_run)
+        print(f"Plataforma: {result['platform']} · cada {result['minutes']} min"
+              f"{' (simulación)' if args.dry_run else ' · instalado'}")
+        if result["platform"] == "linux":
+            print("crontab: " + result["cron_line"])
+        elif result["platform"] == "macos":
+            print("LaunchAgent: " + result["plist_path"])
+        else:
+            for cmd in result["commands"]:
+                print("  " + " ".join(cmd))
+        print("El servicio corre `sb refresh --quiet`: sincroniza, triaja y genera el "
+              "brief. Estado: sb schedule status")
+        return 0
+    if args.schedule_command == "remove":
+        result = scheduler.remove(dry_run=args.dry_run)
+        print(f"{result['platform']}: {'eliminado' if result['removed'] else 'simulación'}")
+        return 0
+    result = scheduler.status()
+    print(f"{result['platform']}: {'instalado' if result['installed'] else 'no instalado'}")
+    if result.get("detail"):
+        print(result["detail"])
+    return 0
+
+
+def cmd_enrich(args) -> int:
+    from .enrich import enrich
+    result = enrich(_store(args), _brain_dir(args), areas=args.area,
+                    limit=args.limit, dry_run=args.dry_run)
+    if result.get("skipped"):
+        print(f"Omitido: {result['skipped']}")
+        return 0
+    if args.dry_run:
+        print(f"Pendientes de enriquecer en {', '.join(result['areas'])}: {result['pending']}")
+        for d in result["docs"][:20]:
+            print(f"  [{d['area']}] {d['title']}")
+        return 0
+    print(f"Enriquecidos con {result['extractor']}: {result['enriched']} documentos "
+          f"({', '.join(result['areas'])}) · KOs nuevos: {result['knowledge_objects']} "
+          f"(reemplazaron {result['removed']['kos']} heurísticos)")
+    return 0
+
+
+def cmd_config(args) -> int:
+    from .config import load_config, set_llm_areas
+    brain_dir = _brain_dir(args)
+    if args.config_command == "llm" and args.areas is not None:
+        try:
+            cfg = set_llm_areas(brain_dir, args.areas)
+        except ValueError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print("Claude habilitado en: " + (", ".join(cfg["llm"]["areas"]) or "ninguna"))
+        return 0
+    import json as _json
+    print(_json.dumps(load_config(brain_dir), ensure_ascii=False, indent=2))
+    return 0
+
+
 def cmd_desktop(args) -> int:
     from .desktop import create_shortcut, find_desktop, register_desktop_folders
 
@@ -790,6 +867,39 @@ def main(argv: list[str] | None = None) -> int:
     pp = pesub.add_parser("unpin", help="suelta el pin de una persona")
     pp.add_argument("name")
     pp.set_defaults(func=cmd_people_pin, unpin=True, role=None, area=None, note=None)
+
+    p = sub.add_parser("refresh", help="mantiene el cerebro al día: fuentes, Google, correo, áreas, brief")
+    p.add_argument("--quiet", action="store_true")
+    p.add_argument("--skip", action="append", help="omitir un paso (sources|google|mail|areas|enrich|brief)")
+    p.set_defaults(func=cmd_refresh)
+
+    sc = sub.add_parser("schedule", help="programa `sb refresh` en tu sistema (sin nube)")
+    scsub = sc.add_subparsers(dest="schedule_command")
+    sc.set_defaults(func=cmd_schedule, schedule_command="status")
+    scp = scsub.add_parser("install", help="instala la tarea programada")
+    scp.add_argument("--every", default="4h", help="intervalo: 4h, 90m (default 4h)")
+    scp.add_argument("--dry-run", action="store_true", help="muestra sin instalar")
+    scp.set_defaults(func=cmd_schedule)
+    scp = scsub.add_parser("remove", help="quita la tarea programada")
+    scp.add_argument("--dry-run", action="store_true")
+    scp.set_defaults(func=cmd_schedule)
+    scp = scsub.add_parser("status", help="¿está instalada?")
+    scp.set_defaults(func=cmd_schedule)
+
+    p = sub.add_parser("enrich", help="segunda pasada con Claude solo en las áreas habilitadas")
+    p.add_argument("--area", action="append", help="limitar a un área (repetible)")
+    p.add_argument("--limit", type=int)
+    p.add_argument("--dry-run", action="store_true", help="lista lo pendiente sin llamar a Claude")
+    p.set_defaults(func=cmd_enrich)
+
+    cf = sub.add_parser("config", help="configuración local (.brain/config.json)")
+    cfsub = cf.add_subparsers(dest="config_command")
+    cf.set_defaults(func=cmd_config, config_command="show", areas=None)
+    cfp = cfsub.add_parser("llm", help="áreas donde se permite Claude")
+    cfp.add_argument("--areas", nargs="*", help="p. ej. academia falp (vacío = ninguna)")
+    cfp.set_defaults(func=cmd_config)
+    cfp = cfsub.add_parser("show", help="muestra la configuración")
+    cfp.set_defaults(func=cmd_config, areas=None)
 
     p = sub.add_parser("desktop", help="acceso directo + carpetas del escritorio como fuentes")
     p.add_argument("--path", help="ruta del escritorio si la detección falla")

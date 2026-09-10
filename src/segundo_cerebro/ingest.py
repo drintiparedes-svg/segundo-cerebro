@@ -95,6 +95,7 @@ def process_document(store: BrainStore, doc: Document, extractor,
 
     # Relaciones implícitas de metadatos: personas ↔ proyecto.
     _link_frontmatter(store, doc)
+    store.mark_extractor(doc.id, type(extractor).__name__)
 
 
 def new_summary(extractor) -> dict:

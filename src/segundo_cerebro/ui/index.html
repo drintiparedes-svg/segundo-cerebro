@@ -1002,15 +1002,59 @@ function mdToHtml(md) {
   return html;
 }
 
+function syncLine(st) {
+  if (!st) return "";
+  const when = st.running ? "sincronizando ahora…"
+    : st.minutes_ago == null ? "aún sin sincronizar"
+    : st.minutes_ago < 60 ? `última sincronización hace ${st.minutes_ago} min`
+    : `última sincronización hace ${Math.round(st.minutes_ago / 60)} h`;
+  const bad = st.last && st.last.ok === false ? " · con errores (ver .brain/logs/)" : "";
+  const counts = st.counts && st.counts.documents != null
+    ? ` · ${st.counts.documents} docs · ${st.counts.kos} KOs` : "";
+  return `<div class="sync-line" id="sync-line">${esc(when)}${esc(bad)}${esc(counts)}
+    <button class="doc-back" style="margin:0 0 0 .6rem;padding:.1rem .5rem;font-size:.7rem"
+      ${st.running ? "disabled" : ""} onclick="refreshNow()">${st.running ? "…" : "Actualizar ahora"}</button></div>`;
+}
+
+let refreshPoll = null;
+async function refreshNow() {
+  if (demoMode) {
+    const el = document.getElementById("sync-line");
+    if (el) el.innerHTML = "Simulación (demo): en tu instancia local esto corre <code>sb refresh</code> — fuentes, Google, correo, áreas, brief.";
+    return;
+  }
+  try {
+    await fetch("/api/refresh", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+  } catch { return; }
+  clearInterval(refreshPoll);
+  refreshPoll = setInterval(async () => {
+    try {
+      const st = await api("/api/status");
+      if (!st.running) {
+        clearInterval(refreshPoll);
+        try { graph = await api("/api/graph"); initSim(); kos = await api("/api/kos"); } catch {}
+        try { areasData = await api("/api/areas"); mail = await api("/api/mail"); } catch {}
+        peopleData = null; sourcesData = null;
+        if (tab === "today" && !selected) renderToday();
+      } else {
+        const el = document.getElementById("sync-line");
+        if (el) el.outerHTML = syncLine(st);
+      }
+    } catch { clearInterval(refreshPoll); }
+  }, 2000);
+  renderToday();
+}
+
 async function renderToday() {
   if (demoMode) {
-    panelBody.innerHTML = `<div class="md">${mdToHtml(DEMO.today)}</div>`;
+    panelBody.innerHTML = syncLine({ running: false, minutes_ago: 12, counts: { documents: 33, kos: 67 } })
+      + `<div class="md">${mdToHtml(DEMO.today)}</div>`;
     return;
   }
   panelBody.innerHTML = `<h2>Tu día</h2><div class="empty">Construyendo el brief desde tu memoria…</div>`;
   try {
-    const res = await api("/api/today");
-    panelBody.innerHTML = `<div class="md">${mdToHtml(res.markdown)}</div>`;
+    const [res, st] = await Promise.all([api("/api/today"), api("/api/status").catch(() => null)]);
+    panelBody.innerHTML = syncLine(st) + `<div class="md">${mdToHtml(res.markdown)}</div>`;
   } catch (err) {
     panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
   }
@@ -1189,10 +1233,54 @@ async function renderSources(keepSuggestions) {
     ${list}
     <div class="node-type" style="margin-top:1rem">asesor: qué conectar</div>
     <div id="suggestions" style="margin-top:.4rem"></div>
-    <div class="sync-line" style="margin-top:.8rem">Sincroniza lo nuevo: <code>sb sources sync --no-llm</code></div>`;
+    <div class="node-type" style="margin-top:1rem">extracción con claude por área</div>
+    <div id="llm-config" style="margin-top:.4rem"></div>
+    <div class="sync-line" style="margin-top:.8rem">Todo se actualiza solo con <code>sb refresh</code>
+      (programable: <code>sb schedule install --every 4h</code>).</div>`;
   bindDropzone();
   if (!keepSuggestions) suggestionsData = null;
   renderSuggestions();
+  renderLlmConfig();
+}
+
+async function renderLlmConfig() {
+  const box = document.getElementById("llm-config");
+  if (!box) return;
+  let cfg, areasList;
+  if (demoMode) {
+    cfg = { llm: { areas: ["academia"], never: ["clinica"] } };
+    areasList = DEMO.areas.map(a => ({ id: a.id, name: a.name }));
+  } else {
+    try { const r = await api("/api/config"); cfg = r.config; areasList = r.areas; }
+    catch (err) { box.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return; }
+  }
+  const never = new Set(cfg.llm.never || []);
+  const on = new Set(cfg.llm.areas || []);
+  box.innerHTML = `<div class="empty" style="padding:0 0 .4rem">Heurística local para todo. Claude (sin entrenamiento)
+    solo en las áreas marcadas; <b>clínica</b> queda siempre fuera.</div>` +
+    areasList.map(a => `<label class="rel-line" style="cursor:${never.has(a.id) ? "not-allowed" : "pointer"};opacity:${never.has(a.id) ? ".5" : "1"}">
+      <input type="checkbox" data-area="${esc(a.id)}" ${on.has(a.id) ? "checked" : ""} ${never.has(a.id) ? "disabled" : ""}
+        onchange="saveLlmConfig()"> <span>${esc(a.name)}</span>
+      <span class="window">${never.has(a.id) ? "nunca" : on.has(a.id) ? "claude" : "local"}</span></label>`).join("");
+}
+
+async function saveLlmConfig() {
+  const areas = [...document.querySelectorAll("#llm-config input[data-area]:checked")].map(i => i.dataset.area);
+  if (demoMode) { renderLlmConfigDemo(areas); return; }
+  try {
+    const res = await fetch("/api/config/llm", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ areas }) });
+    const data = await res.json();
+    if (data.error) alert(data.error);
+  } catch {}
+  renderLlmConfig();
+}
+
+function renderLlmConfigDemo(areas) {
+  document.querySelectorAll("#llm-config label").forEach(l => {
+    const inp = l.querySelector("input");
+    l.querySelector(".window").textContent = inp.disabled ? "nunca" : (areas.includes(inp.dataset.area) ? "claude" : "local");
+  });
 }
 
 function selectNode(n) {

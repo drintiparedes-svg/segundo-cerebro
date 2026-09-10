@@ -28,7 +28,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [12 · Mapa de decisiones](docs/12-mapa-de-decisiones.md) | `sb why`: por qué se tomó cada decisión, con su cadena y evidencia |
 | [13 · Writing agent](docs/13-writing-agent.md) | `sb draft`: borradores de informes y documentos desde tu memoria |
 | [14 · Escalamiento](docs/14-escalamiento.md) | prioridad de áreas, subida de documentos, Zotero/chats/transcripciones, validación de referencias |
-| [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave con pin, configuración local |
+| [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave con pin, `sb refresh` programado, Claude por área |
 
 ## Quickstart
 
@@ -47,6 +47,10 @@ sb sources suggest --apply  # asesor: qué carpetas de tu equipo conectar (solo 
 sb google suggest --apply   # qué calendarios y carpetas de Drive seguir, por cuenta
 sb people                   # personas clave: ranking + sugerencias de pin
 sb people pin "Ricardo" --role "Gerente clínico"
+sb refresh                  # todo al día: fuentes, Google, correo, áreas, brief (local)
+sb schedule install --every 4h   # lo programa en tu sistema; sin nube
+sb config llm --areas academia falp   # Claude solo en esas áreas; clinica nunca
+sb enrich --dry-run         # segunda pasada semántica pendiente
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

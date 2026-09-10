@@ -101,3 +101,55 @@ que ya salía: consultas a Google con permisos de solo lectura y, si activas
 Claude en un área, el texto de esos documentos hacia la API (sin
 entrenamiento). El asesor de carpetas no abre archivos; las sugerencias de
 remitentes no incluyen contenido de correo.
+
+## Al día solo: `sb refresh` y `sb schedule`
+
+`sb refresh` es el único comando que necesitas recordar. Corre en orden,
+tolerando fallos por paso (un conector caído no detiene a los demás):
+
+```
+sources → google (Calendar + Drive) → mail (triaje, metadatos) → areas → enrich → brief
+```
+
+- Lock en `.brain/state/refresh.lock` (dos refresh no se solapan), resumen
+  en `.brain/state/last_refresh.json`, log diario en `.brain/logs/`.
+- `--skip mail`, `--skip google`… omiten un paso; `--quiet` para el servicio.
+- El brief queda en `.brain/reports/brief-*.md` y en
+  `.brain/state/latest-brief.md`; la pestaña **Hoy** lo muestra con la
+  línea «última sincronización hace N min» y el botón **Actualizar ahora**
+  (`POST /api/refresh`, corre en segundo plano sin bloquear la UI).
+
+```bash
+sb refresh                       # a mano, cuando quieras
+sb schedule install --every 4h   # tarea programada nativa, sin admin ni nube
+sb schedule status | remove
+```
+
+`schedule` escribe el programador de tu sistema: **Windows** dos tareas de
+`schtasks` (cada N minutos + al iniciar sesión); **macOS** un LaunchAgent
+(`~/Library/LaunchAgents/cl.segundocerebro.refresh.plist`, `StartInterval`);
+**Linux** una línea de `crontab` etiquetada. `--dry-run` muestra sin tocar
+nada. El acceso directo del escritorio (`sb desktop`) también lanza un
+`refresh` en segundo plano antes de abrir la UI: al encender el equipo ya
+tienes el brief del día.
+
+## Extracción por área: local por defecto, Claude donde importa
+
+Todo documento entra con la heurística local (rápido, sin red) y queda
+marcado con `metadata.extractor`. `sb enrich` hace la **segunda pasada** con
+Claude solo sobre las áreas habilitadas: borra los KOs y relaciones
+heurísticos de cada documento y los reemplaza por la extracción semántica
+(las entidades se conservan). `refresh` lo invoca respetando
+`llm.max_docs_per_run`.
+
+```bash
+sb config llm --areas academia falp   # habilita Claude en esas áreas
+sb config llm --areas clinica         # ✘ rechazado: está en llm.never
+sb enrich --dry-run                   # qué está pendiente, sin llamar a Claude
+sb enrich --area academia --limit 20
+```
+
+Sin `ANTHROPIC_API_KEY` el paso se omite con aviso y la memoria sigue 100 %
+local. En la UI (pestaña **Fuentes**, «extracción con claude por área») las
+casillas escriben la misma configuración; **clínica aparece deshabilitada**
+y el servidor rechaza cualquier intento de activarla (`403`).

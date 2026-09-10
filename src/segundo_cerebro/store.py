@@ -156,6 +156,44 @@ class BrainStore:
         self.conn.execute("UPDATE documents SET area = ? WHERE id = ?", (area, doc_id))
         self.conn.commit()
 
+    def mark_extractor(self, doc_id: str, extractor: str) -> None:
+        """Registra en metadata qué extractor produjo los KOs del documento."""
+        row = self.conn.execute(
+            "SELECT metadata FROM documents WHERE id = ?", (doc_id,)).fetchone()
+        if not row:
+            return
+        meta = json.loads(row["metadata"] or "{}")
+        meta["extractor"] = extractor
+        self.conn.execute("UPDATE documents SET metadata = ? WHERE id = ?",
+                          (json.dumps(meta, ensure_ascii=False), doc_id))
+        self.conn.commit()
+
+    def delete_derived(self, doc_id: str) -> dict:
+        """Borra KOs y relaciones derivados de un documento (para re-extraer).
+        Las entidades se conservan: pueden estar citadas desde otros docs."""
+        ids = [r["id"] for r in self.conn.execute(
+            "SELECT id FROM knowledge_objects WHERE source_doc = ?", (doc_id,))]
+        for ko_id in ids:
+            self.conn.execute("DELETE FROM kos_fts WHERE id = ?", (ko_id,))
+        self.conn.execute("DELETE FROM knowledge_objects WHERE source_doc = ?", (doc_id,))
+        rels = self.conn.execute(
+            "DELETE FROM relationships WHERE source_doc = ?", (doc_id,)).rowcount
+        self.conn.commit()
+        return {"kos": len(ids), "relationships": rels}
+
+    def documents_for_enrich(self, areas: list[str], limit: int = 40,
+                             done_by: str = "ClaudeExtractor") -> list[Document]:
+        """Documentos de esas áreas cuyos KOs aún no vienen de `done_by`."""
+        if not areas:
+            return []
+        marks = ",".join("?" for _ in areas)
+        rows = self.conn.execute(
+            f"SELECT * FROM documents WHERE area IN ({marks}) "
+            "AND COALESCE(json_extract(metadata, '$.extractor'), '') != ? "
+            "ORDER BY date DESC LIMIT ?", (*areas, done_by, limit),
+        ).fetchall()
+        return [self._row_to_document(r) for r in rows]
+
     def set_ko_area(self, ko_id: str, area: str | None) -> None:
         self.conn.execute("UPDATE knowledge_objects SET area = ? WHERE id = ?", (area, ko_id))
         self.conn.commit()
