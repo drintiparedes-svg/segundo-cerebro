@@ -209,6 +209,33 @@ def today_payload(store, params: dict) -> dict:
     return {"markdown": build_today(store, brain_dir, load_areas())}
 
 
+def week_payload(store, params: dict) -> dict:
+    from .areas import load_areas
+    from .projects import load_projects, week_review
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"markdown": "Sin memoria publicada: la instancia corre en modo demo."}
+    names = {a.id: a.name for a in load_areas()}
+    return {"markdown": week_review(store, brain_dir, load_projects(), names)}
+
+
+def projects_payload(store, params: dict) -> list:
+    from .projects import load_projects, project_status
+    if store is None:
+        return []
+    out = []
+    for p in load_projects():
+        st = project_status(store, p)
+        out.append({"id": p.id, "name": p.name, "area": p.area, "deadline": p.deadline,
+                    "days_to_deadline": st["days_to_deadline"], "tasks": st["tasks"],
+                    "done": st["done"], "overdue": len(st["overdue"]),
+                    "due_soon": len(st["due_soon"]),
+                    "next_milestone": ({"name": st["next_milestone"].name,
+                                        "due": st["next_milestone"].due}
+                                       if st["next_milestone"] else None)})
+    return out
+
+
 def status_payload(store, params: dict) -> dict:
     """Última sincronización, si hay una en curso, tamaño de la memoria y
     política LLM — para la cabecera de la pestaña Hoy."""
@@ -270,6 +297,8 @@ ROUTES = {
     "/api/sources/suggest": sources_suggest_payload,
     "/api/today": today_payload,
     "/api/status": status_payload,
+    "/api/week": week_payload,
+    "/api/projects": projects_payload,
     "/api/config": config_payload,
 }
 
@@ -413,8 +442,29 @@ def set_llm_config(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, {"config": cfg}
 
 
+def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Captura manual de UN correo a la memoria (acción explícita del
+    usuario). Trae el cuerpo de ese mensaje y lo guarda en .brain/captured/."""
+    from .mail_capture import capture_by_id
+    data = _json_body(body)
+    if data is None or not data.get("id") or not data.get("account"):
+        return 400, {"error": "faltan id y account"}
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return 400, {"error": "sin memoria local (modo demo)"}
+    try:
+        result = capture_by_id(store, brain_dir, data["account"], data["id"],
+                               fetch=params.get("_fetch"))
+    except Exception as exc:
+        return 502, {"error": f"no pude leer el correo: {exc}"}
+    if result.get("error"):
+        return 404, result
+    return 200, result
+
+
 POST_ROUTES = {
     "/api/areas/override": override_area,
+    "/api/mail/capture": capture_mail,
     "/api/refresh": start_refresh,
     "/api/config/llm": set_llm_config,
     "/api/upload": upload_document,

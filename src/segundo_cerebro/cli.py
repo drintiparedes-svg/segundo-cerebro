@@ -426,6 +426,90 @@ def cmd_config(args) -> int:
     return 0
 
 
+def cmd_project(args) -> int:
+    from .projects import load_projects, project_status
+    projects = load_projects()
+    if not projects:
+        print("Sin proyectos en brain/self/projects.md — define allí tu tesis u otros "
+              "proyectos especiales.", file=sys.stderr)
+        return 1
+    store = _store(args)
+    for p in projects:
+        st = project_status(store, p)
+        dl = (f" · entrega en {st['days_to_deadline']} días ({p.deadline})"
+              if st["days_to_deadline"] is not None else "")
+        print(f"\n{p.name} [{p.area or 'sin área'}]{dl}")
+        print(f"  actividades: {st['done']}/{st['tasks']} hechas · "
+              f"{len(st['overdue'])} atrasadas · {len(st['due_soon'])} vencen en 7 días")
+        if st["next_milestone"]:
+            print(f"  próximo hito: {st['next_milestone'].name} ({st['next_milestone'].due})")
+        for t in st["overdue"][:5]:
+            print(f"  ⚠ {t.valid_to} · {t.title}")
+        for t in st["due_soon"][:5]:
+            print(f"  → {t.valid_to} · {t.title}")
+    return 0
+
+
+def cmd_project_import(args) -> int:
+    from .projects import import_plan, load_projects
+    projects = {p.id: p for p in load_projects()}
+    project = projects.get(args.project)
+    if project is None:
+        print(f"Proyecto «{args.project}» no está en brain/self/projects.md "
+              f"(disponibles: {', '.join(projects) or 'ninguno'})", file=sys.stderr)
+        return 1
+    path = Path(args.path).expanduser()
+    if not path.is_file():
+        print(f"No existe: {path}", file=sys.stderr)
+        return 1
+    result = import_plan(_store(args), path, project, start=args.start, area=args.area)
+    if result.get("error"):
+        print(result["error"], file=sys.stderr)
+        return 1
+    print(f"{project.name}: {result['tasks']} actividades importadas "
+          f"({result['dated']} con fecha de vencimiento) desde {path.name}")
+    if result.get("warning"):
+        print("Aviso: " + result["warning"])
+    print("Reimportar el mismo plan reemplaza, no duplica. Revisa: sb project · sb today")
+    return 0
+
+
+def cmd_week(args) -> int:
+    from .agents import save_report
+    from .areas import load_areas
+    from .projects import load_projects, week_review
+    names = {a.id: a.name for a in load_areas()}
+    md = week_review(_store(args), _brain_dir(args), load_projects(), names)
+    print(md)
+    if args.save:
+        path = save_report(_brain_dir(args), "semana", md)
+        print(f"\nGuardado en {path}")
+    return 0
+
+
+def cmd_mail_capture(args) -> int:
+    from .connectors.google_auth import list_accounts
+    from .mail_capture import capture_by_id
+    accounts = list_accounts()
+    alias = args.account or (accounts[0] if len(accounts) == 1 else None)
+    if not alias:
+        print("Indica la cuenta: sb mail capture <id> --account <alias> "
+              f"(conectadas: {', '.join(accounts) or 'ninguna'})", file=sys.stderr)
+        return 1
+    result = capture_by_id(_store(args), _brain_dir(args), alias, args.id,
+                           prefer_llm=not args.no_llm)
+    if result.get("error"):
+        print(result["error"], file=sys.stderr)
+        return 1
+    if result.get("duplicate"):
+        print(f"Ese correo ya estaba capturado: {result['path']}")
+        return 0
+    print(f"Capturado «{result['title']}» → {result['path']}")
+    print(f"Área: {result['area'] or 'sin área'} · knowledge objects: {result['kos']}")
+    print("Solo este correo entró a la memoria; el resto de tu bandeja sigue fuera.")
+    return 0
+
+
 def cmd_desktop(args) -> int:
     from .desktop import create_shortcut, find_desktop, register_desktop_folders
 
@@ -867,6 +951,29 @@ def main(argv: list[str] | None = None) -> int:
     pp = pesub.add_parser("unpin", help="suelta el pin de una persona")
     pp.add_argument("name")
     pp.set_defaults(func=cmd_people_pin, unpin=True, role=None, area=None, note=None)
+
+    pj = sub.add_parser("project", help="proyectos especiales: hitos, atrasos, plan de trabajo")
+    pjsub = pj.add_subparsers(dest="project_command")
+    pj.set_defaults(func=cmd_project)
+    pjp = pjsub.add_parser("import-plan", help="importa un plan de trabajo Excel como compromisos con fecha")
+    pjp.add_argument("path")
+    pjp.add_argument("--project", required=True, help="id en brain/self/projects.md")
+    pjp.add_argument("--start", help="fecha de la semana 1 (YYYY-MM-DD) si el plan usa S1, S2…")
+    pjp.add_argument("--area", help="forzar área")
+    pjp.set_defaults(func=cmd_project_import)
+
+    p = sub.add_parser("week", help="revisión semanal: decisiones, cierres, atrasos, hitos")
+    p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
+    p.set_defaults(func=cmd_week)
+
+    ml = sub.add_parser("mail", help="correo: captura manual a la memoria")
+    mlsub = ml.add_subparsers(dest="mail_command", required=True)
+    mlp = mlsub.add_parser("capture", help="captura UN correo (por id del triaje) a la memoria")
+    mlp.add_argument("id")
+    mlp.add_argument("--account", help="alias de la cuenta")
+    mlp.add_argument("--no-llm", action="store_true", default=True,
+                     help="(por defecto) extracción local; Claude entra después vía enrich")
+    mlp.set_defaults(func=cmd_mail_capture)
 
     p = sub.add_parser("refresh", help="mantiene el cerebro al día: fuentes, Google, correo, áreas, brief")
     p.add_argument("--quiet", action="store_true")

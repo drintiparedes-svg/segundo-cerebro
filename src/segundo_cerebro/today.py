@@ -62,6 +62,13 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
                                  f"(fuente: {item.source_doc or '—'})")
         lines.append("")
 
+    # ── proyectos especiales (brain/self/projects.md) ────────────────────
+    from .projects import load_projects, project_brief
+    projects = load_projects()
+    if projects:
+        lines.append("## Proyectos especiales")
+        lines.extend(project_brief(store, projects, today))
+
     # ── personas clave (fijadas por ti) ──────────────────────────────────
     from .people import key_people_brief
     key = key_people_brief(store, brain_dir, today)

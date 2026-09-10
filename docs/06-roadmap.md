@@ -55,6 +55,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
   clave con pin ([docs/15](15-modo-activo.md))
 - ✅ Modo activo II: `sb refresh` programado (`sb schedule`) y extracción
   con Claude por área (`sb enrich`, `clinica` nunca)
+- ✅ Modo activo III: captura manual de correo, proyectos especiales con
+  plan Excel → hitos/atrasos (`sb project`), revisión semanal (`sb week`)
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes

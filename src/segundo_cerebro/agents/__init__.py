@@ -29,7 +29,7 @@ def save_latest_triage(brain_dir: str | Path, triaged: list[dict]) -> Path:
     reports = Path(brain_dir) / "reports"
     reports.mkdir(parents=True, exist_ok=True)
     slim = [
-        {"priority": m["priority"], "from": m.get("from", ""),
+        {"id": m.get("id", ""), "priority": m["priority"], "from": m.get("from", ""),
          "subject": m.get("subject", ""), "date": (m.get("date") or "")[:10],
          "account": m.get("account", ""), "reasons": m.get("reasons", []),
          "suggested_action": m.get("suggested_action", "")}

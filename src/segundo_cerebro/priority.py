@@ -18,7 +18,8 @@ from pathlib import Path
 
 from .areas import Area, classify
 
-WEIGHTS = {"tasks": 3, "events": 4, "decisions": 2, "questions": 1, "mail": 4}
+WEIGHTS = {"tasks": 3, "events": 4, "decisions": 2, "questions": 1, "mail": 4,
+           "overdue": 5}
 
 
 # ── overrides manuales ────────────────────────────────────────────────────
@@ -91,9 +92,10 @@ def area_scores(store, areas: list[Area], brain_dir: str | Path) -> list[dict]:
         questions = store.list_knowledge_objects(ko_type="question",
                                                  status="active",
                                                  area=area.id, limit=500)
+        overdue = [t for t in tasks if t.valid_to and t.valid_to < str(today)]
         signals = {"tasks": len(tasks), "events": len(events),
                    "decisions": len(decisions), "questions": len(questions),
-                   "mail": mail_hits.get(area.id, 0)}
+                   "mail": mail_hits.get(area.id, 0), "overdue": len(overdue)}
         auto = sum(signals[k] * WEIGHTS[k] for k in WEIGHTS)
 
         ov = overrides.get(area.id, {})
@@ -120,7 +122,8 @@ def area_scores(store, areas: list[Area], brain_dir: str | Path) -> list[dict]:
 def signals_label(signals: dict) -> str:
     parts = []
     names = {"tasks": "tareas", "events": "eventos 7d", "decisions": "decis. 14d",
-             "questions": "preguntas", "mail": "correo P1-P2"}
+             "questions": "preguntas", "mail": "correo P1-P2",
+             "overdue": "atrasadas"}
     for key, label in names.items():
         if signals.get(key):
             parts.append(f"{signals[key]} {label}")

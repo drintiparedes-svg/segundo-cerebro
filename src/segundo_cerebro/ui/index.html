@@ -426,6 +426,12 @@ const DEMO = {
 - [task] Preparar propuesta de variables mínimas para la base oncohematológica. (fuente: demo-minuta)
 - [question] ¿Qué estándar de interoperabilidad usará la base oncohematológica? (fuente: demo-minuta)
 
+## Proyectos especiales
+### MSc Thesis — entrega en 97 días (2026-12-15) · 11/29 actividades hechas
+- Próximo hito: **Pruebas de usabilidad** en 12 días (2026-09-21)
+- ⚠ Atrasada desde 2026-09-04: Análisis temático Fase 2
+- Vence 2026-09-12: Informe de usabilidad v1
+
 ## Personas clave
 ### 📌 Ricardo — Gerente clínico
 - Próxima reunión: 2026-09-09 · Reunión FALP · gestión clínica
@@ -446,6 +452,31 @@ const DEMO = {
 
 ---
 _Generado localmente desde tu memoria; ninguna llamada externa._`,
+  week: `# Revisión semanal — 2026-09-09
+
+## Decisiones de la semana
+- Avanzar con una base de datos validada para cánceres oncohematológicos. [FALP · Informática Médica]
+
+## Compromisos
+- Cerrados esta semana: 3
+- Atrasados: 1
+  - ⚠ 2026-09-04 · Análisis temático Fase 2 [Academia · MSc]
+- Vencen la próxima semana: 2
+  - 2026-09-12 · Informe de usabilidad v1 [Academia · MSc]
+  - 2026-09-15 · Propuesta de variables mínimas [FALP · Informática Médica]
+
+## Hitos próximos (14 días)
+- 2026-09-21 · **Pruebas de usabilidad** (MSc Thesis)
+
+## Preguntas sin resolver hace más de 30 días
+- ¿Qué estándar de interoperabilidad usará la base oncohematológica? (2026-08-12) [FALP · Informática Médica]
+
+## Correo: 2 P1-P2 en el último triaje
+- P1 · Aprobación base oncohematológica — firma hoy — Ricardo (FALP)
+- P2 · Minuta y compromisos de la sesión — Comité de datos
+
+---
+_Generado localmente desde tu memoria; ninguna llamada externa._`,
   docs: {
     "demo-minuta": {
       title: "Minuta — Reunión oncohematología", date: "2026-08-12",
@@ -455,9 +486,9 @@ _Generado localmente desde tu memoria; ninguna llamada externa._`,
     },
   },
   mail: [
-    { priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
+    { id: "demo-m1", account: "falp", priority: 1, from: "Ricardo (FALP)", subject: "Aprobación base oncohematológica — firma hoy",
       reasons: ["remitente en tu knowledge graph (3 proyectos compartidos)", "lenguaje de plazo"] },
-    { priority: 2, from: "Comité de datos", subject: "Minuta y compromisos de la sesión",
+    { id: "demo-m2", account: "falp", priority: 2, from: "Comité de datos", subject: "Minuta y compromisos de la sesión",
       reasons: ["pide una acción tuya"] },
     { priority: 3, from: "NEJM Catalyst", subject: "Encuesta del mes: Clinician Autonomy",
       reasons: ["relevancia profesional, sin plazo duro"] },
@@ -486,6 +517,7 @@ let peopleData = null;      // {people, suggested, unknown_senders}
 let sourcesData = null;     // {sources, ignored}
 let suggestionsData = null; // [{path, name, verdict, …}]
 let memFilter = "decisions";
+let todayView = "today";     // today | week
 let selected = null;
 let hovered = null;
 
@@ -768,12 +800,35 @@ const PRIORITY_LABELS = {
 
 function mailCard(m) {
   const reasons = (m.reasons || []).map(esc).join("; ");
+  const key = esc((m.account || "") + ":" + (m.id || ""));
+  const capture = (m.id && m.priority <= 3)
+    ? `<div class="who" id="cap-${key}"><a class="src" href="#" onclick="captureMail('${esc(m.id)}', '${esc(m.account || "")}');return false">Capturar a la memoria</a></div>`
+    : "";
   return `<div class="ko">
     <div class="meta"><span class="chip p${m.priority}">P${m.priority}</span><span>${esc(m.date || "")}</span></div>
     <p><span class="mail-from">${esc(m.from)}</span> — ${esc(m.subject)}</p>
     <div class="who">${reasons}</div>
     ${m.suggested_action ? `<div class="who">Acción sugerida: ${esc(m.suggested_action)}</div>` : ""}
+    ${capture}
   </div>`;
+}
+
+async function captureMail(id, account) {
+  const box = document.getElementById(`cap-${esc(account + ":" + id)}`);
+  if (demoMode) {
+    if (box) box.innerHTML = "Simulación (demo): en tu instancia local este correo se guardaría en <code>.brain/captured/</code> y entraría a la memoria — solo este, por tu decisión.";
+    return;
+  }
+  if (box) box.textContent = "Capturando…";
+  try {
+    const res = await fetch("/api/mail/capture", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, account }) });
+    const data = await res.json();
+    if (data.error) { if (box) box.textContent = "Error: " + data.error; return; }
+    if (data.duplicate) { if (box) box.textContent = "Ya estaba capturado."; return; }
+    if (box) box.innerHTML = `Capturado → área ${esc(data.area || "sin área")} · ${data.kos} KOs · <a class="src" href="#" onclick="viewDoc('${esc(data.doc_id)}');return false">ver nota</a>`;
+    try { kos = await api("/api/kos"); graph = await api("/api/graph"); initSim(); } catch {}
+  } catch (err) { if (box) box.textContent = "Error: " + err.message; }
 }
 
 function renderMail() {
@@ -985,7 +1040,7 @@ function mdToHtml(md) {
     .replace(/`(.+?)`/g, "<code>$1</code>")
     .replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1<i>$2</i>");
   for (const raw of lines) {
-    const line = raw.trimEnd();
+    const line = raw.trim();                 // listas anidadas ("  - ") se aplanan
     if (line.startsWith("- ")) {
       if (!inList) { html += "<ul>"; inList = true; }
       html += `<li>${inline(line.slice(2))}</li>`;
@@ -1045,16 +1100,24 @@ async function refreshNow() {
   renderToday();
 }
 
+function todayNav() {
+  return `<div class="sub-nav">
+    <button class="${todayView === "today" ? "active" : ""}" onclick="todayView='today';renderToday()">Hoy</button>
+    <button class="${todayView === "week" ? "active" : ""}" onclick="todayView='week';renderToday()">Semana</button></div>`;
+}
+
 async function renderToday() {
   if (demoMode) {
+    const md = todayView === "week" ? DEMO.week : DEMO.today;
     panelBody.innerHTML = syncLine({ running: false, minutes_ago: 12, counts: { documents: 33, kos: 67 } })
-      + `<div class="md">${mdToHtml(DEMO.today)}</div>`;
+      + todayNav() + `<div class="md">${mdToHtml(md)}</div>`;
     return;
   }
-  panelBody.innerHTML = `<h2>Tu día</h2><div class="empty">Construyendo el brief desde tu memoria…</div>`;
+  panelBody.innerHTML = `<h2>${todayView === "week" ? "Tu semana" : "Tu día"}</h2><div class="empty">Construyendo desde tu memoria…</div>`;
   try {
-    const [res, st] = await Promise.all([api("/api/today"), api("/api/status").catch(() => null)]);
-    panelBody.innerHTML = syncLine(st) + `<div class="md">${mdToHtml(res.markdown)}</div>`;
+    const path = todayView === "week" ? "/api/week" : "/api/today";
+    const [res, st] = await Promise.all([api(path), api("/api/status").catch(() => null)]);
+    panelBody.innerHTML = syncLine(st) + todayNav() + `<div class="md">${mdToHtml(res.markdown)}</div>`;
   } catch (err) {
     panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
   }

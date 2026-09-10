@@ -127,7 +127,8 @@ del usuario con su número de relaciones. Prioriza cada correo:
 1 = urgente (acción hoy) · 2 = importante · 3 = responder cuando pueda ·
 4 = informativo · 5 = archivar/ruido
 
-Pondera MÁS a remitentes presentes en el knowledge graph. Devuelve SOLO JSON:
+Pondera MÁS a remitentes presentes en el knowledge graph, y más aún a los
+de `pinned_people` (personas fijadas por el usuario). Devuelve SOLO JSON:
 {"triage": [{"id": "…", "priority": 1, "reason": "una frase",
              "suggested_action": "una frase"}]}
 No inventes correos ni ids."""
@@ -139,6 +140,7 @@ def claude_triage(emails: list[dict], store) -> list[dict]:
     known = _known_people(store) if store else {}
     payload = {
         "known_people": known,
+        "pinned_people": _pinned(store) if store else [],
         "emails": [
             {k: mail.get(k, "") for k in
              ("id", "from", "subject", "date", "snippet", "labels", "body")}

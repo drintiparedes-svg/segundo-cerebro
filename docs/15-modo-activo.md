@@ -153,3 +153,63 @@ Sin `ANTHROPIC_API_KEY` el paso se omite con aviso y la memoria sigue 100 %
 local. En la UI (pestaña **Fuentes**, «extracción con claude por área») las
 casillas escriben la misma configuración; **clínica aparece deshabilitada**
 y el servidor rechaza cualquier intento de activarla (`403`).
+
+## Gmail: metadatos siempre, captura manual cuando importa
+
+El triaje (`sb agent mail`, y el paso `mail` de `refresh`) sigue sin
+guardar correos: `latest-triage.json` lleva remitente, asunto, prioridad,
+razones y ahora el **id** del mensaje — nunca cuerpo ni snippet. Cuando un
+correo sí merece entrar a la memoria, lo capturas **tú, uno a uno**:
+
+```bash
+sb mail capture 18f2a9c0b7d3e4f5 --account falp
+```
+
+o el enlace **«Capturar a la memoria»** de la pestaña **Correo** (P1–P3).
+La captura trae ese único mensaje con cuerpo (`gmail.fetch_message`), lo
+guarda como nota Markdown con frontmatter en `.brain/captured/` y lo pasa
+por la misma capa cognitiva que cualquier documento (heurística; Claude
+después vía `enrich` si el área está habilitada). Es el **único camino** por
+el que texto de correo entra al cerebro; duplicados se detectan por
+contenido.
+
+## Proyectos especiales: la tesis como hitos, atrasos y próximos pasos
+
+`brain/self/projects.md` (frontmatter, como `areas.md`) define cada proyecto
+con área, `start`, `deadline`, personas e **hitos** con fecha. Y tu plan de
+trabajo en Excel se convierte en compromisos con vencimiento:
+
+```bash
+sb project import-plan PlanTrabajo_VPH_3meses.xlsx --project tesis --start 2026-04-06
+sb project          # estado: hechas/total, atrasadas, vencen en 7 días, próximo hito
+sb week --save      # revisión semanal → .brain/reports/semana-*.md
+```
+
+El importador recorre todas las hojas y se queda con la que más actividades
+aporta (p. ej. «Actividades Detalladas», no la portada ni el Gantt); entiende
+columnas *Actividad · Sem. · Inicio · Fin · Estado · Responsable ·
+Entregable · Prioridad* y convierte `S1, S2…` en fechas a partir de
+`--start`. Ids deterministas: **reimportar reemplaza, no duplica**; el Excel
+queda ligado como fuente de cada compromiso.
+
+Efectos en la gestión activa:
+- `sb today` y la pestaña **Hoy** ganan la sección **Proyectos especiales**:
+  días a la entrega, avance, próximo hito, ⚠ atrasadas, vence esta semana.
+- `sb week` (y la vista **Semana** de la pestaña Hoy): decisiones de la
+  semana, compromisos cerrados/atrasados/próximos, hitos a 14 días,
+  preguntas sin resolver hace más de 30 días, correo P1-P2.
+- La prioridad de áreas suma la señal `atrasadas × 5`: un proyecto con
+  atrasos sube su área en el ranking.
+
+## Puesta en marcha en tu equipo
+
+```bash
+git pull && pip install -e ".[files,google]"
+sb sources suggest --apply          # carpetas del escritorio y estándar
+sb google suggest --apply           # calendarios y carpetas de Drive por cuenta
+sb people                           # fija a tus personas clave
+sb config llm --areas academia falp # Claude solo ahí (clinica nunca)
+sb project import-plan <plan.xlsx> --project tesis --start <YYYY-MM-DD>
+sb refresh && sb schedule install --every 4h
+sb serve                            # o el acceso directo del escritorio
+```

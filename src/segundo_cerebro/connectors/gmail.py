@@ -66,6 +66,21 @@ def sender_name(from_header: str) -> str:
     return (m.group(1) if m else from_header.split("@")[0]).strip()
 
 
+def fetch_message(alias: str, message_id: str, base=None) -> dict | None:
+    """Trae UN correo completo (cuerpo incluido). Solo lo usa la captura
+    manual: el usuario decide correo por correo qué entra a la memoria."""
+    service = build_service("gmail", "v1", alias, base=base)
+    try:
+        msg = service.users().messages().get(
+            userId="me", id=message_id, format="full").execute()
+    except Exception as exc:
+        if "404" in str(exc):
+            return None
+        raise
+    body = extract_body(msg.get("payload", {}))[:50_000]
+    return message_to_email(msg, alias, body=body)
+
+
 def fetch_inbox(alias: str, days: int = 7, query: str | None = None,
                 include_bodies: bool = False, limit: int = 50,
                 base=None) -> list[dict]:

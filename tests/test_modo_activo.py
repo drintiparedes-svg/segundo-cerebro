@@ -350,3 +350,136 @@ def test_api_status_config_and_refresh(store, tmp_path, monkeypatch):
     webapi._refresh_threads[str(tmp_path)].join(timeout=30)
     st, res = dispatch(store, "/api/status", {})
     assert res["running"] is False and res["last"]["ok"] is True and res["minutes_ago"] == 0
+
+
+# ── Entrega 3: proyectos especiales, semana, captura de correo ───────────
+
+from datetime import date, timedelta
+
+from segundo_cerebro.agents import save_latest_triage
+from segundo_cerebro.mail_capture import capture_by_id, capture_email, email_to_note
+from segundo_cerebro.priority import area_scores, signals_label
+from segundo_cerebro.projects import (Milestone, Project, import_plan, load_projects,
+                                      parse_plan_xlsx, project_brief, project_status,
+                                      week_review)
+
+PROJECTS_FILE = REPO / "brain" / "self" / "projects.md"
+
+
+def _plan_xlsx(path: Path):
+    from openpyxl import Workbook
+    wb = Workbook()
+    portada = wb.active
+    portada.title = "Portada"
+    portada.append(["", "PLAN DE TRABAJO"])
+    portada.append(["", "Actividades Detalladas", "ver hoja"])   # no es cabecera
+    ws = wb.create_sheet("Actividades Detalladas")
+    ws.append(["ACTIVIDADES DETALLADAS DEL PLAN"])
+    ws.append(["Fase", "Sem.", "Actividad", "Responsable", "Entregable", "Duración", "Estado", "Prioridad"])
+    ws.append(["F1", "S1", "Búsqueda sistemática de literatura", "IP", "Lista ≥30 artículos", "5 días", "Completado", "Alta"])
+    ws.append(["F1", "S2", "Entrevistas semiestructuradas", "IP", "10 transcripciones", "7 días", "Pendiente", "Alta"])
+    ws.append(["F2", "S9", "Pruebas de usabilidad con prototipo", "IP + Part.", "Informe SUS", "4 días", "Pendiente", "Crítica"])
+    wb.save(path)
+
+
+def test_seed_projects_and_plan_parser(tmp_path):
+    projects = load_projects(PROJECTS_FILE)
+    assert projects and projects[0].id == "tesis" and projects[0].area == "academia"
+    assert projects[0].milestones and projects[0].milestones[0].due.startswith("2026")
+
+    xlsx = tmp_path / "plan.xlsx"
+    _plan_xlsx(xlsx)
+    rows = parse_plan_xlsx(xlsx, start="2026-04-06")
+    assert [r["sheet"] for r in rows] == ["Actividades Detalladas"] * 3, "elige la hoja con actividades"
+    assert rows[0]["due"] == "2026-04-12" and rows[0]["status"] == "done"
+    assert rows[2]["week"] == 9 and rows[2]["due"] == "2026-06-07" and rows[2]["priority"] == "Crítica"
+    assert parse_plan_xlsx(xlsx)[1]["due"] is None, "sin start no inventa fechas"
+
+
+def test_import_plan_is_idempotent_and_feeds_today_and_priority(store, tmp_path):
+    xlsx = tmp_path / "PlanTrabajo.xlsx"
+    _plan_xlsx(xlsx)
+    today = date.today()
+    start = (today - timedelta(days=20)).isoformat()   # S1 y S2 ya vencieron, S9 no
+    project = Project(id="tesis", name="MSc Thesis", area="academia", start=start,
+                      deadline=(today + timedelta(days=60)).isoformat(),
+                      milestones=[Milestone("Pruebas de usabilidad", (today + timedelta(days=10)).isoformat())],
+                      people=["Inti"])
+    res = import_plan(store, xlsx, project)
+    assert res["tasks"] == 3 and res["dated"] == 3
+    again = import_plan(store, xlsx, project)
+    assert again["tasks"] == 3
+    tasks = store.list_knowledge_objects(ko_type="task", project="MSc Thesis", limit=50)
+    assert len(tasks) == 3, "reimportar reemplaza, no duplica"
+    assert {t.status for t in tasks} == {"done", "active"}
+    assert all(t.area == "academia" and t.source_doc == res["doc_id"] for t in tasks)
+    assert store.get_document(res["doc_id"]).metadata["extractor"] == "PlanImporter"
+
+    st = project_status(store, project, today)
+    assert st["done"] == 1 and [t.title for t in st["overdue"]] == ["Entrevistas semiestructuradas"]
+    assert st["next_milestone"].name == "Pruebas de usabilidad" and st["days_to_deadline"] == 60
+    lines = project_brief(store, [project], today)
+    assert lines[0].startswith("### MSc Thesis — entrega en 60 días")
+    assert any("⚠ Atrasada" in l and "Entrevistas" in l for l in lines)
+
+    scores = {r["id"]: r for r in area_scores(store, AREAS, tmp_path)}
+    assert scores["academia"]["signals"]["overdue"] == 1
+    assert "1 atrasadas" in signals_label(scores["academia"]["signals"])
+
+    md = week_review(store, tmp_path, [project], {a.id: a.name for a in AREAS}, today)
+    assert "## Revisión semanal" not in md and md.startswith("# Revisión semanal")
+    assert "Atrasados: 1" in md and "Entrevistas semiestructuradas" in md
+    assert "Pruebas de usabilidad" in md and "MSc Thesis" in md
+
+
+def test_mail_capture_is_explicit_and_only_path_for_mail_text(store, tmp_path):
+    email = {"id": "m-1", "account": "falp", "from": "Ricardo Morales <r@falp.org>",
+             "to": "inti@falp.org", "subject": "Aprobación base oncohematológica",
+             "date": "2026-09-08T10:00:00-03:00", "labels": [],
+             "snippet": "Hola Inti, confirmo…",
+             "body": "Hola Inti,\n\nDECISIÓN: aprobamos la base oncohematológica.\n\n- [ ] Enviar variables mínimas el viernes\n\nRicardo"}
+    # el triaje persistido no lleva cuerpo ni snippet, pero sí id/cuenta
+    save_latest_triage(tmp_path, [{**email, "priority": 1, "reasons": ["x"]}])
+    saved = json.loads((tmp_path / "reports" / "latest-triage.json").read_text(encoding="utf-8"))
+    assert saved[0]["id"] == "m-1" and saved[0]["account"] == "falp"
+    assert "body" not in saved[0] and "snippet" not in saved[0]
+
+    note = email_to_note(email)
+    assert note.startswith("---\ntitle:") and "message_id: m-1" in note
+
+    res = capture_email(store, tmp_path, email)
+    assert not res["duplicate"] and res["kos"] >= 2 and res["area"] == "falp"
+    path = Path(res["path"])
+    assert path.parent == tmp_path / "captured" and path.name.startswith("2026-09-08-aprobacion")
+    doc = store.get_document(res["doc_id"])
+    assert doc.doc_type == "email" and doc.metadata["message_id"] == "m-1"
+    assert any(k.ko_type == "decision" for k in store.list_knowledge_objects(limit=100)
+               if k.source_doc == doc.id)
+    assert capture_email(store, tmp_path, email)["duplicate"] is True
+
+    fetched = []
+    fake_fetch = lambda alias, mid: (fetched.append((alias, mid)) or
+                                     ({**email, "id": "m-2", "subject": "Otro", "body": "Otro cuerpo"} if mid == "m-2" else None))
+    res = capture_by_id(store, tmp_path, "falp", "m-2", fetch=fake_fetch)
+    assert fetched == [("falp", "m-2")] and res["title"] == "Otro"
+    assert "error" in capture_by_id(store, tmp_path, "falp", "nope", fetch=fake_fetch)
+
+
+def test_api_week_projects_and_capture(store, tmp_path):
+    st, res = dispatch(store, "/api/week", {})
+    assert st == 200 and res["markdown"].startswith("# Revisión semanal")
+    st, res = dispatch(store, "/api/projects", {})
+    assert st == 200 and res[0]["id"] == "tesis" and "next_milestone" in res[0]
+
+    email = {"id": "m-9", "account": "falp", "from": "Ana <a@x.cl>", "subject": "Minuta",
+             "date": "2026-09-01T09:00:00Z", "body": "PREGUNTA: ¿quién valida el estándar?"}
+    st, res = dispatch_post(store, "/api/mail/capture",
+                            {"_fetch": lambda a, m: email if m == "m-9" else None},
+                            json.dumps({"id": "m-9", "account": "falp"}).encode())
+    assert st == 200 and res["kos"] >= 1 and (tmp_path / "captured").exists()
+    st, res = dispatch_post(store, "/api/mail/capture",
+                            {"_fetch": lambda a, m: None},
+                            json.dumps({"id": "zz", "account": "falp"}).encode())
+    assert st == 404
+    st, res = dispatch_post(store, "/api/mail/capture", {}, b"{}")
+    assert st == 400
