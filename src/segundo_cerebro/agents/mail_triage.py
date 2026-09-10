@@ -19,6 +19,7 @@ from __future__ import annotations
 import json
 import os
 import re
+from pathlib import Path
 from datetime import datetime, timezone
 
 from ..connectors.gmail import sender_name
@@ -52,9 +53,18 @@ def _known_people(store) -> dict[str, int]:
     return people
 
 
+def _pinned(store) -> list[str]:
+    """Personas fijadas por el usuario (.brain/people_overrides.json)."""
+    from ..people import pinned_names
+    db_path = getattr(store, "db_path", None)
+    return [p.lower() for p in pinned_names(Path(db_path).parent)] if db_path else []
+
+
 def heuristic_triage(emails: list[dict], store) -> list[dict]:
-    """Puntuación 100% local, cruzada con el knowledge graph."""
+    """Puntuación 100% local, cruzada con el knowledge graph y tus personas
+    fijadas."""
     known = _known_people(store) if store else {}
+    pinned = _pinned(store) if store else []
     now = datetime.now(timezone.utc)
     triaged = []
     for mail in emails:
@@ -62,6 +72,9 @@ def heuristic_triage(emails: list[dict], store) -> list[dict]:
         reasons = []
 
         name = sender_name(mail.get("from", "")).lower()
+        if any(p in name or name in p for p in pinned):
+            score += 30
+            reasons.append("persona fijada por ti")
         graph_hit = next((p for p in known if p in name or name in p), None)
         if graph_hit:
             rels = known[graph_hit]

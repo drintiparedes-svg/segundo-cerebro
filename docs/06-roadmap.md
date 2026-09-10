@@ -51,6 +51,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
 - ✅ Prioridad de áreas con validación manual, subida de documentos,
   Zotero/chats/transcripciones y validación de referencias
   ([docs/14](14-escalamiento.md))
+- ✅ Modo activo I: asesor de fuentes (carpetas, Drive, Calendar) y personas
+  clave con pin ([docs/15](15-modo-activo.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes

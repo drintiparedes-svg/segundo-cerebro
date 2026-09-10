@@ -34,9 +34,15 @@ def graph_payload(store) -> dict:
             })
             degree[rel.source_id] = degree.get(rel.source_id, 0) + 1
             degree[rel.target_id] = degree.get(rel.target_id, 0) + 1
+    pinned = set()
+    db_path = getattr(store, "db_path", None)
+    if db_path:
+        from .people import pinned_names
+        pinned = set(pinned_names(Path(db_path).parent))
     nodes = [
         {"id": e.id, "name": e.name, "type": e.entity_type,
-         "degree": degree.get(e.id, 0)}
+         "degree": degree.get(e.id, 0),
+         **({"pinned": True} if e.name in pinned else {})}
         for e in entities
     ]
 
@@ -146,6 +152,63 @@ def doc_payload(store, params: dict) -> dict:
             "body": doc.body[:60_000], "web_link": link}
 
 
+def _brain_dir(store) -> Path | None:
+    db_path = getattr(store, "db_path", None)
+    return Path(db_path).parent if db_path else None
+
+
+def people_payload(store, params: dict) -> dict:
+    """Ranking de personas + sugerencias de pin. 100% local."""
+    from .people import people_scores, signals_label
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"people": [], "suggested": [], "unknown_senders": []}
+    data = people_scores(store, brain_dir)
+    for row in data["people"]:
+        row["signals_label"] = signals_label(row["signals"])
+    return data
+
+
+def sources_payload(store, params: dict) -> dict:
+    """Fuentes registradas con su estado de sincronización + ignoradas."""
+    from .connectors.localfs import load_registry
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"sources": [], "ignored": []}
+    reg = load_registry(brain_dir)
+    out = []
+    for s in reg["sources"]:
+        st = reg["state"].get(s["path"], {})
+        out.append({**s, "last_sync": st.get("last_sync"),
+                    "available": Path(s["path"]).is_dir()})
+    return {"sources": out, "ignored": reg.get("ignored", [])}
+
+
+def sources_suggest_payload(store, params: dict) -> dict:
+    """Carpetas del escritorio/estándar que conviene conectar (solo nombres
+    y fechas; nunca abre archivos)."""
+    from .advisor import candidate_roots, suggest_sources
+    from .areas import load_areas
+    from .desktop import find_desktop
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"suggestions": [], "roots": []}
+    roots = candidate_roots(find_desktop())
+    if params.get("root"):
+        roots = [Path(params["root"]).expanduser()]
+    return {"roots": [str(r) for r in roots],
+            "suggestions": suggest_sources(brain_dir, roots, load_areas())}
+
+
+def today_payload(store, params: dict) -> dict:
+    from .areas import load_areas
+    from .today import build_today
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"markdown": "Sin memoria publicada: la instancia corre en modo demo."}
+    return {"markdown": build_today(store, brain_dir, load_areas())}
+
+
 def why_payload(store, params: dict) -> dict:
     """Dossier de una decisión: por qué se tomó. 100% local."""
     from .areas import load_areas
@@ -183,6 +246,10 @@ ROUTES = {
     "/api/areas": areas_payload,
     "/api/why": why_payload,
     "/api/doc": doc_payload,
+    "/api/people": people_payload,
+    "/api/sources": sources_payload,
+    "/api/sources/suggest": sources_suggest_payload,
+    "/api/today": today_payload,
 }
 
 
@@ -253,9 +320,47 @@ def upload_document(store, params: dict, body: bytes) -> tuple[int, object]:
                  "kos": summary["knowledge_objects"]}
 
 
+def _json_body(body: bytes) -> dict | None:
+    try:
+        return json.loads(body.decode("utf-8"))
+    except (ValueError, UnicodeDecodeError):
+        return None
+
+
+def pin_person(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Fija / suelta una persona (validación manual, .brain/people_overrides.json)."""
+    from .people import set_person_override
+    data = _json_body(body)
+    if data is None or not data.get("name"):
+        return 400, {"error": "falta name"}
+    brain_dir = _brain_dir(store) or Path(".brain")
+    entry = set_person_override(
+        brain_dir, data["name"], pin=data.get("pin"), role=data.get("role"),
+        area=data.get("area"), note=data.get("note"))
+    return 200, {"name": data["name"], "override": entry,
+                 **people_payload(store, {})}
+
+
+def apply_source(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Acepta (registra) o ignora una carpeta sugerida. Solo lectura sobre
+    la carpeta; lo único que se escribe es .brain/sources.json."""
+    from .advisor import apply_suggestion
+    data = _json_body(body)
+    if data is None or not data.get("path"):
+        return 400, {"error": "falta path"}
+    brain_dir = _brain_dir(store) or Path(".brain")
+    try:
+        result = apply_suggestion(brain_dir, data["path"], bool(data.get("accept")))
+    except NotADirectoryError as exc:
+        return 404, {"error": str(exc)}
+    return 200, {**result, **sources_payload(store, {})}
+
+
 POST_ROUTES = {
     "/api/areas/override": override_area,
     "/api/upload": upload_document,
+    "/api/people/pin": pin_person,
+    "/api/sources/apply": apply_source,
 }
 
 

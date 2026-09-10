@@ -262,6 +262,25 @@
     font-family: "JetBrains Mono", monospace; line-height: 1.6;
   }
 
+  .sub-nav { display: flex; gap: .3rem; margin-bottom: .8rem; flex-wrap: wrap; }
+  .sub-nav button {
+    background: var(--surface-2); border: 1px solid var(--line);
+    border-radius: 999px; color: var(--ink-dim); cursor: pointer;
+    font: inherit; font-size: .72rem; padding: .2rem .7rem;
+  }
+  .sub-nav button.active { color: var(--accent-ink); background: var(--accent); border-color: var(--accent); }
+  .md h2 { font-size: 1.15rem; margin: .2rem 0 .6rem; }
+  .md h3 { font-family: "Fraunces", Georgia, serif; font-size: .95rem; font-weight: 600; margin: .9rem 0 .3rem; color: var(--ink); }
+  .md h4 { font-size: .82rem; margin: .7rem 0 .2rem; color: var(--ink-dim); font-weight: 600; }
+  .md ul { margin: 0 0 .4rem; padding-left: 1.1rem; font-size: .86rem; }
+  .md li { margin: .15rem 0; }
+  .md p { font-size: .85rem; color: var(--ink-dim); margin: .3rem 0; }
+  .md code { font-family: "JetBrains Mono", monospace; font-size: .78rem; background: var(--surface-2); padding: .05rem .3rem; border-radius: .3rem; }
+  .verdict { font-family: "JetBrains Mono", monospace; font-size: .64rem; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .45rem; border-radius: 999px; border: 1px solid var(--line); }
+  .verdict.conectar { color: var(--project); border-color: var(--project); }
+  .verdict.revisar { color: var(--person); border-color: var(--person); }
+  .verdict.ignorar { color: var(--ink-faint); }
+  .sync-line { font-family: "JetBrains Mono", monospace; font-size: .68rem; color: var(--ink-faint); margin: .2rem 0 .8rem; }
   a.src { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
   a.src:hover { border-bottom-style: solid; }
   .doc-back {
@@ -306,12 +325,12 @@
 
 <aside id="panel" class="open">
   <nav>
-    <button data-tab="areas" class="active">Áreas</button>
-    <button data-tab="decisions">Decisiones</button>
-    <button data-tab="tasks">Compromisos</button>
-    <button data-tab="timeline">Timeline</button>
+    <button data-tab="today" class="active">Hoy</button>
+    <button data-tab="areas">Áreas</button>
+    <button data-tab="people">Personas</button>
+    <button data-tab="memory">Memoria</button>
     <button data-tab="mail">Correo</button>
-    <button data-tab="upload">Subir</button>
+    <button data-tab="sources">Fuentes</button>
     <button data-tab="ask">Preguntar</button>
   </nav>
   <div id="panel-body"></div>
@@ -327,7 +346,7 @@ const DEMO = {
   graph: {
     nodes: [
       { id: "inti", name: "Inti", type: "person", degree: 6 },
-      { id: "ricardo", name: "Ricardo", type: "person", degree: 3 },
+      { id: "ricardo", name: "Ricardo", type: "person", degree: 3, pinned: true },
       { id: "raimundo", name: "Raimundo", type: "person", degree: 1 },
       { id: "falp", name: "FALP", type: "organization", degree: 3 },
       { id: "imperial", name: "Imperial College", type: "organization", degree: 2 },
@@ -379,6 +398,54 @@ const DEMO = {
     { id: "personal", name: "Personal", rank: 4, score: 6, score_auto: 6, weight: 1,
       signals_label: "1 tareas", documents: 4, kos: 6, tasks_open: 1, decisions: 1 },
   ],
+  people: [
+    { name: "Ricardo", score: 31, rank: 1, pinned: true, role: "Gerente clínico", area: "falp",
+      signals: { degree: 3, recent: 2, upcoming: 1, mail: 1 }, signals_label: "1 reunión(es) próximas · 2 menciones 30d · 1 correos P1-P2 · 3 relaciones" },
+    { name: "Raimundo", score: 9, rank: 2, pinned: false, signals: { degree: 1, recent: 1, upcoming: 0, mail: 1 }, signals_label: "1 menciones 30d · 1 correos P1-P2 · 1 relaciones" },
+    { name: "Supervisora MSc", score: 8, rank: 3, pinned: false, signals: { degree: 1, recent: 2, upcoming: 0, mail: 0 }, signals_label: "2 menciones 30d · 1 relaciones" },
+    { name: "Comité de datos", score: 4, rank: 4, pinned: false, signals: { degree: 2, recent: 0, upcoming: 0, mail: 0 }, signals_label: "2 relaciones" },
+  ],
+  suggested: ["Raimundo", "Supervisora MSc"],
+  unknown_senders: [{ name: "Ana Soto", mails: 2 }],
+  sources: [
+    { path: "~/Escritorio/Tesis 2026", alias: "Tesis 2026", last_sync: "2026-09-09T08:00:00Z", available: true },
+    { path: "~/Escritorio/FALP", alias: "FALP", last_sync: "2026-09-09T08:00:00Z", available: true },
+  ],
+  suggestions: [
+    { path: "~/Documentos/Medismart", name: "Medismart", verdict: "conectar", score: 58, files: 23, recent: 9, area_guess: "medismart", reasons: ["23 archivos soportados", "9 modificados en los últimos 90 días", "calza con el área «medismart»"] },
+    { path: "~/Descargas", name: "Descargas", verdict: "revisar", score: 21, files: 12, recent: 4, area_guess: null, reasons: ["12 archivos soportados", "4 modificados en los últimos 90 días", "pocas señales; decide tú"] },
+    { path: "~/Escritorio/Fotos", name: "Fotos", verdict: "ignorar", score: 0, files: 0, recent: 0, area_guess: null, reasons: ["sin archivos de texto/oficina soportados"] },
+  ],
+  today: `# Tu día — miércoles 9 de septiembre de 2026
+
+## Agenda
+- HOY → **Reunión FALP · gestión clínica** · con Inti, Ricardo [FALP · Informática Médica]
+- 2026-09-11 · **Avance ONCODATA** · con Inti [FALP · Informática Médica]
+
+### Prep · Reunión FALP · gestión clínica
+- [task] Preparar propuesta de variables mínimas para la base oncohematológica. (fuente: demo-minuta)
+- [question] ¿Qué estándar de interoperabilidad usará la base oncohematológica? (fuente: demo-minuta)
+
+## Personas clave
+### 📌 Ricardo — Gerente clínico
+- Próxima reunión: 2026-09-09 · Reunión FALP · gestión clínica
+- [task] Preparar propuesta de variables mínimas para la base oncohematológica.
+
+## Compromisos abiertos
+### FALP · Informática Médica
+- Preparar propuesta de variables mínimas para la base oncohematológica. (2026-08-12)
+### Academia · MSc
+- Enviar borrador de metodología de tesis a supervisión. (2026-08-20)
+
+## Correo que espera algo de ti
+- P1 · **Aprobación base oncohematológica — firma hoy** — Ricardo (FALP)
+- P2 · **Minuta y compromisos de la sesión** — Comité de datos
+
+## Sin resolver
+- ¿Qué estándar de interoperabilidad usará la base oncohematológica? [FALP · Informática Médica]
+
+---
+_Generado localmente desde tu memoria; ninguna llamada externa._`,
   docs: {
     "demo-minuta": {
       title: "Minuta — Reunión oncohematología", date: "2026-08-12",
@@ -415,6 +482,10 @@ let graph = { nodes: [], links: [] };
 let kos = [];
 let mail = [];
 let areasData = [];
+let peopleData = null;      // {people, suggested, unknown_senders}
+let sourcesData = null;     // {sources, ignored}
+let suggestionsData = null; // [{path, name, verdict, …}]
+let memFilter = "decisions";
 let selected = null;
 let hovered = null;
 
@@ -593,6 +664,13 @@ function draw() {
     ctx.lineWidth = 1.5;
     ctx.strokeStyle = bg;
     ctx.stroke();
+    if (n.pinned) {                            // persona fijada por el usuario
+      ctx.beginPath();
+      ctx.arc(n.x, n.y, n.r + 4, 0, Math.PI * 2);
+      ctx.lineWidth = 1.6;
+      ctx.strokeStyle = css("--accent");
+      ctx.stroke();
+    }
 
     ctx.fillStyle = dimmed ? inkDim : ink;
     ctx.font = (n.id === (focus && focus.id) ? "600 " : "") + "11.5px 'Albert Sans', sans-serif";
@@ -659,7 +737,7 @@ canvas.addEventListener("wheel", (e) => {
 
 /* ── panel ────────────────────────────────────────────────────────────── */
 const panelBody = document.getElementById("panel-body");
-let tab = "areas";
+let tab = "today";
 
 document.querySelectorAll("nav button").forEach(btn => {
   btn.addEventListener("click", () => {
@@ -752,7 +830,7 @@ function renderAreas() {
   if (!areasData.length) {
     panelBody.innerHTML = `<h2>Áreas de trabajo</h2>
       <div class="empty">Tu memoria está vacía o sin áreas asignadas. Sube un
-      documento en la pestaña <b>Subir</b>, o corre <code>sb ingest brain/</code>
+      documento en la pestaña <b>Fuentes</b>, o corre <code>sb ingest brain/</code>
       y <code>sb areas assign</code> (clasificación 100% local).</div>`;
     return;
   }
@@ -786,14 +864,7 @@ function renderAreas() {
     </div>`).join("");
 }
 
-function renderUpload() {
-  panelBody.innerHTML = `<h2>Subir un documento</h2>
-    <div id="dropzone" class="dropzone">Arrastra un archivo aquí<br>
-      <small>o haz clic para elegir — pdf, docx, xlsx, pptx, md, txt, csv, vtt</small>
-    </div>
-    <input id="file-input" type="file" hidden>
-    <div id="upload-result" class="empty">El archivo se guarda y procesa solo
-    en tu máquina (.brain/uploads/); se clasifica por área automáticamente.</div>`;
+function bindDropzone() {
   const zone = document.getElementById("dropzone");
   const input = document.getElementById("file-input");
   zone.addEventListener("click", () => input.click());
@@ -869,8 +940,11 @@ async function viewDoc(id) {
 
 function renderTab() {
   if (selected) return renderNode(selected);
+  if (tab === "today") return renderToday();
   if (tab === "areas") return renderAreas();
-  if (tab === "upload") return renderUpload();
+  if (tab === "people") return renderPeople();
+  if (tab === "memory") return renderMemory();
+  if (tab === "sources") return renderSources();
   if (tab === "mail") return renderMail();
   if (tab === "ask") {
     panelBody.innerHTML = `
@@ -883,16 +957,242 @@ function renderTab() {
     document.getElementById("ask-form").addEventListener("submit", onAsk);
     return;
   }
-  const byTab = {
+}
+
+/* ── memoria: decisiones / compromisos / timeline ─────────────────────── */
+function renderMemory() {
+  const byFilter = {
     decisions: kos.filter(k => k.ko_type === "decision"),
     tasks: kos.filter(k => k.ko_type === "task" && k.status === "active"),
     timeline: kos.filter(k => k.ko_type === "event").sort((a, b) => b.date.localeCompare(a.date)),
   };
   const titles = { decisions: "Registro de decisiones", tasks: "Compromisos abiertos", timeline: "Memoria episódica" };
-  const items = byTab[tab] || [];
-  panelBody.innerHTML = `<h2>${titles[tab]}</h2>` +
+  const items = byFilter[memFilter] || [];
+  panelBody.innerHTML = `<h2>${titles[memFilter]}</h2>
+    <div class="sub-nav">${Object.keys(titles).map(f =>
+      `<button class="${f === memFilter ? "active" : ""}" onclick="memFilter='${f}';renderMemory()">${
+        { decisions: "Decisiones", tasks: "Compromisos", timeline: "Timeline" }[f]}</button>`).join("")}</div>` +
     (items.length ? items.map(koCard).join("") :
-      `<div class="empty">Aún no hay registros. Ingesta notas con <code>sb ingest brain/</code>.</div>`);
+      `<div class="empty">Aún no hay registros. Sube un documento en <b>Fuentes</b> o corre <code>sb ingest brain/</code>.</div>`);
+}
+
+/* ── hoy: brief del día ───────────────────────────────────────────────── */
+function mdToHtml(md) {
+  const lines = md.split("\n");
+  let html = "", inList = false;
+  const inline = (t) => esc(t)
+    .replace(/\*\*(.+?)\*\*/g, "<b>$1</b>")
+    .replace(/`(.+?)`/g, "<code>$1</code>")
+    .replace(/(^|\s)_(.+?)_(?=\s|$)/g, "$1<i>$2</i>");
+  for (const raw of lines) {
+    const line = raw.trimEnd();
+    if (line.startsWith("- ")) {
+      if (!inList) { html += "<ul>"; inList = true; }
+      html += `<li>${inline(line.slice(2))}</li>`;
+      continue;
+    }
+    if (inList) { html += "</ul>"; inList = false; }
+    if (line.startsWith("### ")) html += `<h4>${inline(line.slice(4))}</h4>`;
+    else if (line.startsWith("## ")) html += `<h3>${inline(line.slice(3))}</h3>`;
+    else if (line.startsWith("# ")) html += `<h2>${inline(line.slice(2))}</h2>`;
+    else if (line === "---") html += "<hr style='border:0;border-top:1px solid var(--line);margin:.8rem 0'>";
+    else if (line) html += `<p>${inline(line)}</p>`;
+  }
+  if (inList) html += "</ul>";
+  return html;
+}
+
+async function renderToday() {
+  if (demoMode) {
+    panelBody.innerHTML = `<div class="md">${mdToHtml(DEMO.today)}</div>`;
+    return;
+  }
+  panelBody.innerHTML = `<h2>Tu día</h2><div class="empty">Construyendo el brief desde tu memoria…</div>`;
+  try {
+    const res = await api("/api/today");
+    panelBody.innerHTML = `<div class="md">${mdToHtml(res.markdown)}</div>`;
+  } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
+  }
+}
+
+/* ── personas clave ───────────────────────────────────────────────────── */
+async function loadPeople() {
+  if (demoMode) {
+    if (!peopleData) peopleData = { people: DEMO.people.map(p => ({ ...p })),
+      suggested: [...DEMO.suggested], unknown_senders: DEMO.unknown_senders };
+    return peopleData;
+  }
+  peopleData = await api("/api/people");
+  return peopleData;
+}
+
+function demoPinPerson(name, pin) {
+  const p = peopleData.people.find(x => x.name === name);
+  if (p) p.pinned = pin;
+  peopleData.people.sort((a, b) => (a.pinned === b.pinned ? b.score - a.score : a.pinned ? -1 : 1));
+  peopleData.people.forEach((x, i) => { x.rank = i + 1; });
+  peopleData.suggested = peopleData.suggested.filter(n => n !== name);
+  for (const n of nodes) if (n.type === "person" && n.name === name) n.pinned = pin;
+  renderPeople();
+}
+
+async function pinPerson(name, pin) {
+  if (demoMode) return demoPinPerson(name, pin);
+  try {
+    const res = await fetch("/api/people/pin", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ name, pin }),
+    });
+    peopleData = await res.json();
+    try { graph = await api("/api/graph"); initSim(); } catch {}
+    renderPeople();
+  } catch { /* servidor no disponible */ }
+}
+
+function personCard(p) {
+  const role = p.role ? ` <span class="who">— ${esc(p.role)}</span>` : "";
+  return `<div class="area-card">
+    <div class="area-head">
+      <span class="area-rank">#${p.rank}${p.pinned ? " 📌" : ""}</span>
+      <h3>${esc(p.name)}${role}</h3>
+      <div class="area-actions">
+        <button title="${p.pinned ? "Soltar pin" : "Fijar como persona clave"}"
+          onclick="pinPerson('${esc(p.name)}', ${p.pinned ? "false" : "true"})">${p.pinned ? "✕" : "📌"}</button>
+      </div>
+    </div>
+    <div class="area-stats"><span>score <b>${p.score}</b></span><span>${esc(p.signals_label || "")}</span></div>
+  </div>`;
+}
+
+async function renderPeople() {
+  panelBody.innerHTML = `<h2>Personas clave</h2><div class="empty">Calculando relevancia…</div>`;
+  let data;
+  try { data = await loadPeople(); } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return;
+  }
+  if (!data.people.length) {
+    panelBody.innerHTML = `<h2>Personas clave</h2>
+      <div class="empty">Aún no hay personas en el grafo. Sube documentos, sincroniza
+      tus fuentes o corre <code>sb ingest brain/</code>.</div>`;
+    return;
+  }
+  let html = `<h2>Personas clave</h2>`;
+  if (data.suggested.length) {
+    html += `<div class="empty" style="padding:.2rem 0 .7rem">Sugerencia: fija a
+      ${data.suggested.map(n => `<a class="src" href="#" onclick="pinPerson('${esc(n)}', true);return false">${esc(n)}</a>`).join(", ")}
+      — aparecen en tu agenda, correo y grafo con más señales.</div>`;
+  }
+  html += data.people.slice(0, 40).map(personCard).join("");
+  if ((data.unknown_senders || []).length) {
+    html += `<div class="node-type" style="margin-top:1rem">remitentes frecuentes fuera del grafo</div>
+      <div class="empty" style="padding:.3rem 0">${data.unknown_senders.map(u =>
+        `${esc(u.name)} (${u.mails})`).join(" · ")}<br><small>Solo nombres del último triaje;
+      ningún contenido de correo entra a la memoria.</small></div>`;
+  }
+  panelBody.innerHTML = html;
+}
+
+/* ── fuentes: subir + carpetas conectadas + asesor ───────────────────── */
+async function loadSources() {
+  if (demoMode) {
+    if (!sourcesData) sourcesData = { sources: DEMO.sources.map(s => ({ ...s })), ignored: [] };
+    return sourcesData;
+  }
+  sourcesData = await api("/api/sources");
+  return sourcesData;
+}
+
+async function suggestSources() {
+  const box = document.getElementById("suggestions");
+  box.innerHTML = `<div class="empty">Revisando tu escritorio y carpetas estándar (solo nombres y fechas; no abre archivos)…</div>`;
+  try {
+    if (demoMode) {
+      suggestionsData = suggestionsData || DEMO.suggestions.map(s => ({ ...s }));
+    } else {
+      suggestionsData = (await api("/api/sources/suggest")).suggestions;
+    }
+    renderSuggestions();
+  } catch (err) {
+    box.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
+  }
+}
+
+async function applySource(path, accept) {
+  if (demoMode) {
+    const i = suggestionsData.findIndex(s => s.path === path);
+    if (i >= 0) {
+      const s = suggestionsData.splice(i, 1)[0];
+      if (accept) sourcesData.sources.push({ path: s.path, alias: s.name, last_sync: null, available: true });
+    }
+    renderSources(true);
+    return;
+  }
+  try {
+    const res = await fetch("/api/sources/apply", {
+      method: "POST", headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ path, accept }),
+    });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    sourcesData = { sources: data.sources, ignored: data.ignored };
+    suggestionsData = (suggestionsData || []).filter(s => s.path !== path);
+    renderSources(true);
+  } catch { /* servidor no disponible */ }
+}
+
+function renderSuggestions() {
+  const box = document.getElementById("suggestions");
+  if (!box) return;
+  if (!suggestionsData) {
+    box.innerHTML = `<button class="doc-back" onclick="suggestSources()">Buscar carpetas para conectar</button>`;
+    return;
+  }
+  if (!suggestionsData.length) {
+    box.innerHTML = `<div class="empty">Nada nuevo que sugerir: todo está conectado o ignorado.</div>`;
+    return;
+  }
+  box.innerHTML = suggestionsData.map(s => `
+    <div class="area-card">
+      <div class="area-head">
+        <span class="verdict ${esc(s.verdict)}">${esc(s.verdict)}</span>
+        <h3>${esc(s.name)}${s.area_guess ? ` <span class="who">→ ${esc(s.area_guess)}</span>` : ""}</h3>
+        <div class="area-actions">
+          <button title="Conectar (solo lectura)" onclick="applySource('${esc(s.path)}', true)">Conectar</button>
+          <button title="Ignorar" onclick="applySource('${esc(s.path)}', false)">Ignorar</button>
+        </div>
+      </div>
+      <div class="area-stats"><span><b>${s.files}</b> archivos</span><span><b>${s.recent}</b> recientes</span></div>
+      <div class="who">${(s.reasons || []).map(esc).join("; ")}</div>
+    </div>`).join("");
+}
+
+async function renderSources(keepSuggestions) {
+  panelBody.innerHTML = `<h2>Fuentes</h2><div class="empty">Cargando…</div>`;
+  let data;
+  try { data = await loadSources(); } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return;
+  }
+  const list = data.sources.length ? data.sources.map(s => `
+    <div class="rel-line"><span class="rt">${s.available === false ? "no disponible" : "carpeta"}</span>
+      <span>${esc(s.alias)}</span>
+      <span class="window">${s.last_sync ? "sync " + esc(s.last_sync.slice(0, 10)) : "sin sincronizar"}</span></div>`).join("")
+    : `<div class="empty">Sin carpetas conectadas. Usa el asesor de abajo o <code>sb desktop</code>.</div>`;
+  panelBody.innerHTML = `<h2>Fuentes</h2>
+    <div class="node-type">subir un documento</div>
+    <div id="dropzone" class="dropzone" style="margin:.4rem 0 .5rem">Arrastra un archivo aquí<br>
+      <small>o haz clic para elegir — pdf, docx, xlsx, pptx, md, txt, csv, vtt</small></div>
+    <input id="file-input" type="file" hidden>
+    <div id="upload-result" class="empty" style="padding:.2rem 0 .9rem">Se guarda y procesa solo en tu máquina
+      (<code>.brain/uploads/</code>); se clasifica por área automáticamente.</div>
+    <div class="node-type">carpetas conectadas (solo lectura)</div>
+    ${list}
+    <div class="node-type" style="margin-top:1rem">asesor: qué conectar</div>
+    <div id="suggestions" style="margin-top:.4rem"></div>
+    <div class="sync-line" style="margin-top:.8rem">Sincroniza lo nuevo: <code>sb sources sync --no-llm</code></div>`;
+  bindDropzone();
+  if (!keepSuggestions) suggestionsData = null;
+  renderSuggestions();
 }
 
 function selectNode(n) {

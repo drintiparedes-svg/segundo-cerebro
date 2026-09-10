@@ -62,6 +62,13 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
                                  f"(fuente: {item.source_doc or '—'})")
         lines.append("")
 
+    # ── personas clave (fijadas por ti) ──────────────────────────────────
+    from .people import key_people_brief
+    key = key_people_brief(store, brain_dir, today)
+    if key:
+        lines.append("## Personas clave")
+        lines.extend(key)
+
     # ── compromisos abiertos por área ─────────────────────────────────────
     lines.append("## Compromisos abiertos")
     tasks = store.list_knowledge_objects(ko_type="task", status="active", limit=200)

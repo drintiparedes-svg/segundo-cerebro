@@ -212,6 +212,143 @@ def cmd_sources_sync(args) -> int:
     return 0
 
 
+def cmd_sources_suggest(args) -> int:
+    """Asesor de carpetas: qué conectar, qué ignorar (solo nombres/fechas)."""
+    from .advisor import apply_suggestion, candidate_roots, suggest_sources
+    from .areas import load_areas
+    from .desktop import find_desktop
+
+    brain_dir = _brain_dir(args)
+    roots = ([Path(r).expanduser() for r in args.root] if args.root
+             else candidate_roots(find_desktop()))
+    if not roots:
+        print("No encontré escritorio ni carpetas estándar. Indica una: "
+              "sb sources suggest --root <carpeta>", file=sys.stderr)
+        return 1
+    print("Raíces revisadas: " + ", ".join(str(r) for r in roots))
+    suggestions = suggest_sources(brain_dir, roots, load_areas())
+    if not suggestions:
+        print("Nada nuevo que sugerir: todo está conectado o ignorado.")
+        return 0
+    icon = {"conectar": "✔", "revisar": "?", "ignorar": "–"}
+    for s in suggestions:
+        area = f" → {s['area_guess']}" if s["area_guess"] else ""
+        print(f"{icon[s['verdict']]} {s['verdict']:<8} {s['name']}{area}  "
+              f"[{s['files']} archivos, {s['recent']} recientes]")
+        print(f"    {'; '.join(s['reasons'])}")
+    if not args.apply:
+        print("\nAplica con: sb sources suggest --apply  (una a una, Enter acepta "
+              "las «conectar», n ignora, s salta, q termina)")
+        return 0
+
+    print("\nRevisión — Enter acepta la sugerencia · y conecta · n ignora · "
+          "s salta · q termina")
+    for s in suggestions:
+        try:
+            answer = input(f"{s['verdict']:<8} {s['name']} > ").strip().lower()
+        except EOFError:
+            break
+        if answer == "q":
+            break
+        if answer == "s":
+            continue
+        accept = (answer == "y") or (answer == "" and s["verdict"] == "conectar")
+        if answer == "" and s["verdict"] == "revisar":
+            continue
+        result = apply_suggestion(brain_dir, s["path"], accept)
+        print(f"    {result['action']}")
+    print("\nSincroniza lo nuevo con: sb sources sync --no-llm")
+    return 0
+
+
+def cmd_google_suggest(args) -> int:
+    """Qué carpetas de Drive y calendarios seguir, por cuenta."""
+    from .advisor import drive_query_suggestions
+    from .areas import load_areas
+    from .connectors.google_auth import list_accounts, load_state, save_state
+
+    accounts = [args.account] if args.account else list_accounts()
+    if not accounts:
+        print("Sin cuentas conectadas. Usa: sb google connect <alias>", file=sys.stderr)
+        return 1
+    for alias in accounts:
+        print(f"\n== Cuenta {alias} ==")
+        state = load_state(alias)
+        try:
+            from .connectors.gcalendar import list_calendars
+            cals = list_calendars(alias)
+        except Exception as exc:
+            print(f"  calendarios: no disponibles ({exc})")
+            cals = []
+        chosen_cals = set(state.get("calendars") or ["primary"])
+        for i, c in enumerate(cals, 1):
+            mark = "✔" if (c["id"] in chosen_cals or (c["primary"] and "primary" in chosen_cals)) else " "
+            print(f"  [{mark}] {i}. {c['name']}{' (principal)' if c['primary'] else ''}")
+        try:
+            from .connectors.gdrive import list_root_folders
+            folders = list_root_folders(alias)
+        except Exception as exc:
+            print(f"  carpetas Drive: no disponibles ({exc})")
+            folders = []
+        chosen_folders = {f["id"] for f in state.get("drive_folders", [])}
+        for i, f in enumerate(folders, 1):
+            mark = "✔" if f["id"] in chosen_folders else " "
+            print(f"  [{mark}] D{i}. {f['name']}")
+        if not args.apply:
+            continue
+        try:
+            ans = input("  Calendarios a seguir (números separados por coma, "
+                        "Enter mantiene): ").strip()
+            if ans:
+                idx = [int(x) for x in ans.replace(" ", "").split(",") if x]
+                state["calendars"] = [cals[i - 1]["id"] for i in idx if 0 < i <= len(cals)]
+            ans = input("  Carpetas de Drive a seguir (D-números, Enter = toda la "
+                        "unidad): ").strip().lower().replace("d", "")
+            if ans:
+                idx = [int(x) for x in ans.replace(" ", "").split(",") if x]
+                state["drive_folders"] = [{"id": folders[i - 1]["id"],
+                                           "name": folders[i - 1]["name"]}
+                                          for i in idx if 0 < i <= len(folders)]
+                state.pop("drive_last_modified", None)  # re-barrer con el nuevo filtro
+            save_state(alias, state)
+            print("  guardado.")
+        except (EOFError, ValueError):
+            print("  sin cambios.")
+    print("\nFiltros de Drive sugeridos por área (úsalos con sb google sync --query):")
+    for s in drive_query_suggestions(load_areas()):
+        print(f"  {s['area']:<14} {s['query']}")
+    return 0
+
+
+def cmd_people(args) -> int:
+    from .people import people_scores, signals_label
+    data = people_scores(_store(args), _brain_dir(args))
+    if not data["people"]:
+        print("Aún no hay personas en el grafo. Ingesta o sincroniza primero.")
+        return 0
+    print("Personas por relevancia (📌 = fijada por ti)\n")
+    for r in data["people"][:25]:
+        pin = "📌 " if r["pinned"] else "   "
+        role = f" — {r['role']}" if r.get("role") else ""
+        print(f"{pin}#{r['rank']:<3} {r['name']}{role}  (score {r['score']}: "
+              f"{signals_label(r['signals'])})")
+    if data["suggested"]:
+        print("\nSugerencia: fija a " + ", ".join(data["suggested"])
+              + "  →  sb people pin \"Nombre\" --role \"…\"")
+    if data["unknown_senders"]:
+        print("Remitentes frecuentes fuera del grafo: "
+              + ", ".join(f"{u['name']} ({u['mails']})" for u in data["unknown_senders"]))
+    return 0
+
+
+def cmd_people_pin(args) -> int:
+    from .people import set_person_override
+    entry = set_person_override(_brain_dir(args), args.name, pin=not args.unpin,
+                                role=args.role, area=args.area, note=args.note)
+    print(f"{args.name}: {'fijada' if entry.get('pin') else 'sin pin'} {entry}")
+    return 0
+
+
 def cmd_desktop(args) -> int:
     from .desktop import create_shortcut, find_desktop, register_desktop_folders
 
@@ -636,6 +773,24 @@ def main(argv: list[str] | None = None) -> int:
     sp.add_argument("--no-llm", action="store_true", help="extracción heurística")
     sp.set_defaults(func=cmd_sources_sync)
 
+    sp = ssub.add_parser("suggest", help="asesor: qué carpetas conectar o ignorar")
+    sp.add_argument("--root", action="append", help="raíz a revisar (repetible)")
+    sp.add_argument("--apply", action="store_true", help="aceptar/ignorar una a una")
+    sp.set_defaults(func=cmd_sources_suggest)
+
+    pe = sub.add_parser("people", help="personas clave: ranking y pin manual")
+    pesub = pe.add_subparsers(dest="people_command")
+    pe.set_defaults(func=cmd_people)
+    pp = pesub.add_parser("pin", help="fija una persona como relevante")
+    pp.add_argument("name")
+    pp.add_argument("--role")
+    pp.add_argument("--area")
+    pp.add_argument("--note")
+    pp.set_defaults(func=cmd_people_pin, unpin=False)
+    pp = pesub.add_parser("unpin", help="suelta el pin de una persona")
+    pp.add_argument("name")
+    pp.set_defaults(func=cmd_people_pin, unpin=True, role=None, area=None, note=None)
+
     p = sub.add_parser("desktop", help="acceso directo + carpetas del escritorio como fuentes")
     p.add_argument("--path", help="ruta del escritorio si la detección falla")
     p.add_argument("--port", type=int, default=8765)
@@ -745,6 +900,11 @@ def main(argv: list[str] | None = None) -> int:
 
     gp = gsub.add_parser("accounts", help="lista cuentas conectadas")
     gp.set_defaults(func=cmd_google_accounts)
+
+    gp = gsub.add_parser("suggest", help="qué calendarios y carpetas de Drive seguir")
+    gp.add_argument("--account", help="solo esta cuenta")
+    gp.add_argument("--apply", action="store_true", help="elegir interactivamente")
+    gp.set_defaults(func=cmd_google_suggest)
 
     gp = gsub.add_parser("sync", help="sincroniza Calendar y Drive a la memoria")
     gp.add_argument("--account", help="solo esta cuenta (default: todas)")

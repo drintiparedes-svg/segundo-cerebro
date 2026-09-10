@@ -28,6 +28,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [12 · Mapa de decisiones](docs/12-mapa-de-decisiones.md) | `sb why`: por qué se tomó cada decisión, con su cadena y evidencia |
 | [13 · Writing agent](docs/13-writing-agent.md) | `sb draft`: borradores de informes y documentos desde tu memoria |
 | [14 · Escalamiento](docs/14-escalamiento.md) | prioridad de áreas, subida de documentos, Zotero/chats/transcripciones, validación de referencias |
+| [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave con pin, configuración local |
 
 ## Quickstart
 
@@ -42,6 +43,10 @@ sb timeline                 # memoria episódica
 sb serve                    # UI web: grafo de conocimiento en http://127.0.0.1:8765
 sb areas                    # ranking de áreas por prioridad (auto × validación manual)
 sb areas set falp --pin 1   # validación manual: pin, peso o pausa
+sb sources suggest --apply  # asesor: qué carpetas de tu equipo conectar (solo lectura)
+sb google suggest --apply   # qué calendarios y carpetas de Drive seguir, por cuenta
+sb people                   # personas clave: ranking + sugerencias de pin
+sb people pin "Ricardo" --role "Gerente clínico"
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

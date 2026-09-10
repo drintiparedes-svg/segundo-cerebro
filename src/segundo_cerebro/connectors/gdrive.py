@@ -95,6 +95,19 @@ def _download(service, meta: dict) -> str | None:
     return str(data)
 
 
+def list_root_folders(alias: str, base=None, limit: int = 200) -> list[dict]:
+    """Carpetas de primer nivel de «Mi unidad» (solo id y nombre) para
+    elegir cuáles seguir en `sb google suggest`."""
+    service = build_service("drive", "v3", alias, base=base)
+    resp = service.files().list(
+        q="mimeType='application/vnd.google-apps.folder' and trashed=false "
+          "and 'root' in parents",
+        fields="files(id,name,modifiedTime)", pageSize=limit, orderBy="name",
+    ).execute()
+    return [{"id": f["id"], "name": f["name"],
+             "modified_time": f.get("modifiedTime")} for f in resp.get("files", [])]
+
+
 def sync(store, alias: str, query: str | None = None, base=None) -> list[Document]:
     """Sincroniza archivos de texto nuevos/modificados de la cuenta.
 
@@ -112,6 +125,10 @@ def sync(store, alias: str, query: str | None = None, base=None) -> list[Documen
         q += f" and modifiedTime > '{cursor}'"
     if query:
         q += f" and ({query})"
+    folders = state.get("drive_folders") or []
+    if folders and not query:
+        parents = " or ".join(f"'{f['id']}' in parents" for f in folders)
+        q += f" and ({parents})"
 
     files: list[dict] = []
     page_token = None
