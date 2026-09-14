@@ -128,9 +128,9 @@ organizaciones y proyectos. No inventes nada que no esté en el texto."""
 
     def extract(self, doc: Document) -> ExtractionResult:
         import json
-        import anthropic
+        from .ai import client as ai_client
 
-        client = anthropic.Anthropic()
+        client = ai_client()
         response = client.messages.create(
             model=self.model,
             max_tokens=16000,
@@ -182,8 +182,10 @@ organizaciones y proyectos. No inventes nada que no esté en el texto."""
 
 
 def get_extractor(prefer_llm: bool = True):
-    """Devuelve el mejor extractor disponible."""
-    if prefer_llm:
+    """Devuelve el mejor extractor disponible. Con la IA apagada, siempre
+    el heurístico."""
+    from .ai import is_off
+    if prefer_llm and not is_off():
         try:
             import anthropic  # noqa: F401
             return ClaudeExtractor()

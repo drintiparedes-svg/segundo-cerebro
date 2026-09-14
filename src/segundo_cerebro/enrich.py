@@ -19,6 +19,10 @@ def enrich(store, brain_dir: str | Path, areas: list[str] | None = None,
     from .areas import assign_all, load_areas
     from .ingest import new_summary, process_document
 
+    from .ai import is_off
+    if is_off(brain_dir):
+        return {"skipped": "IA apagada (modo manual supervisado); nada sale del equipo",
+                "enriched": 0}
     cfg = load_config(brain_dir)
     allowed = llm_areas(cfg)
     if areas:

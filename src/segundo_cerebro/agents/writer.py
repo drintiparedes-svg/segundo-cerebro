@@ -154,9 +154,9 @@ Devuelve SOLO el markdown del borrador."""
 
 
 def claude_draft(template: str, topic: str, material: dict) -> str:
-    import anthropic
+    from ..ai import client as ai_client
 
-    client = anthropic.Anthropic()
+    client = ai_client()
     with client.messages.stream(
         model=os.environ.get("SB_MODEL", "claude-opus-5"),
         max_tokens=32000,
@@ -180,7 +180,8 @@ def draft(store, kind: str, topic: str, area: str | None = None,
         raise FileNotFoundError(
             f"No existe la plantilla «{kind}». Disponibles: {available}")
     material = gather_material(store, topic, area=area)
-    if prefer_llm:
+    from ..ai import is_off
+    if prefer_llm and not is_off():
         try:
             import anthropic  # noqa: F401
             return claude_draft(template, topic, material), "claude"

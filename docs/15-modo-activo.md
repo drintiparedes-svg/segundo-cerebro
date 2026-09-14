@@ -213,3 +213,36 @@ sb project import-plan <plan.xlsx> --project tesis --start <YYYY-MM-DD>
 sb refresh && sb schedule install --every 4h
 sb serve                            # o el acceso directo del escritorio
 ```
+
+## Botón de emergencia: apagar toda la IA
+
+Si en algún momento no quieres seguir usando IA, un solo interruptor deja
+el sistema en **modo manual supervisado**. Es una compuerta de código, no
+un control cosmético: todo cliente de Claude se construye con `ai.client()`,
+que se niega si el interruptor está apagado.
+
+```bash
+sb ai off --reason "motivo opcional"   # APAGA
+sb ai status
+sb ai on                               # reactiva
+```
+
+En la UI: botón **⏻ IA** en la cabecera (pide confirmación y motivo); al
+apagar aparece el banner rojo «Modo manual supervisado» con el botón
+**Reactivar IA**.
+
+Qué hace `off`, de inmediato y en todos los procesos (CLI, servidor,
+tarea programada):
+
+| Efecto | Detalle |
+|---|---|
+| Ninguna llamada a Claude | extracción → heurística; triaje → local; borradores → andamiaje; `sb ask` → context pack; curador → local; `enrich` → omitido |
+| Claude deshabilitado en todas las áreas | `llm.areas = []` (la lista previa se guarda para restaurarla) |
+| Nada corre solo | quita la tarea programada; `refresh.auto = false`, así `sb refresh --quiet` (servicio y acceso directo) no hace nada. `sb refresh` a mano sigue disponible, 100 % local |
+| Tu memoria no se toca | ningún documento ni knowledge object se borra |
+| Registro | `.brain/logs/ai-switch.log` y marcador `.brain/AI_OFF` con fecha y motivo |
+
+`on` restaura las áreas con Claude y `refresh.auto`; **la tarea programada
+no se reinstala sola** (`sb schedule install` cuando tú decidas). Para
+forzar el apagado desde el entorno (p. ej. en otro equipo o en un script):
+`SB_AI_OFF=1`.

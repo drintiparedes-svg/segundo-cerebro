@@ -135,7 +135,7 @@ No inventes correos ni ids."""
 
 
 def claude_triage(emails: list[dict], store) -> list[dict]:
-    import anthropic
+    from ..ai import client as ai_client
 
     known = _known_people(store) if store else {}
     payload = {
@@ -147,7 +147,7 @@ def claude_triage(emails: list[dict], store) -> list[dict]:
             for mail in emails
         ],
     }
-    client = anthropic.Anthropic()
+    client = ai_client()
     response = client.messages.create(
         model=os.environ.get("SB_MODEL", "claude-opus-5"),
         max_tokens=16000,
@@ -173,7 +173,8 @@ def claude_triage(emails: list[dict], store) -> list[dict]:
 
 
 def triage(emails: list[dict], store, prefer_llm: bool = True) -> list[dict]:
-    if prefer_llm:
+    from ..ai import is_off
+    if prefer_llm and not is_off():
         try:
             import anthropic  # noqa: F401
             return claude_triage(emails, store)

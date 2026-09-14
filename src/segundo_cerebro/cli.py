@@ -52,7 +52,9 @@ def cmd_ask(args) -> int:
     if llm_available():
         print(answer(pack))
     else:
-        print("(Sin credenciales de Claude: mostrando el context pack)\n")
+        from .ai import is_off
+        print("(IA apagada — modo manual supervisado: mostrando el context pack)\n"
+              if is_off() else "(Sin credenciales de Claude: mostrando el context pack)\n")
         print(pack.to_markdown())
     return 0
 
@@ -349,8 +351,38 @@ def cmd_people_pin(args) -> int:
     return 0
 
 
+def cmd_ai(args) -> int:
+    from . import ai
+    brain_dir = _brain_dir(args)
+    if args.ai_command == "off":
+        st = ai.switch_off(brain_dir, reason=args.reason or "")
+        print("IA APAGADA — modo manual supervisado.")
+        print("  · Ninguna llamada a Claude (extracción, triaje, borradores, preguntas): todo local.")
+        print("  · Claude deshabilitado en todas las áreas; tarea programada: "
+              f"{'quitada' if st.get('schedule_removed') is True else st.get('schedule_removed') or 'no había'}.")
+        print("  · Nada corre solo: sb refresh --quiet no hace nada; a mano sigue disponible.")
+        print("  · Tu memoria no se toca. Reactivar: sb ai on")
+        return 0
+    if args.ai_command == "on":
+        st = ai.switch_on(brain_dir)
+        print("IA reactivada (modo asistido).")
+        print(f"  · Áreas con Claude restauradas: {', '.join(st['restored_llm_areas']) or 'ninguna'}")
+        print(f"  · {st['schedule_note']}")
+        return 0
+    st = ai.status(brain_dir)
+    print(f"IA: {'APAGADA' if not st['enabled'] else 'activa'} · modo {st['mode']}")
+    if not st["enabled"]:
+        print(f"  desde {st.get('off_at') or '?'} · motivo: {st.get('reason') or '—'}"
+              + (" · forzado por SB_AI_OFF" if st.get("env_forced") else ""))
+    return 0
+
+
 def cmd_refresh(args) -> int:
     from .refresh import run_refresh
+    if args.quiet:
+        from .config import load_config
+        if not load_config(_brain_dir(args))["refresh"].get("auto", True):
+            return 0   # modo manual supervisado: nada corre solo
     say = (lambda m: None) if args.quiet else print
     if not args.quiet:
         print("Actualizando el cerebro (todo local; Google solo lectura)…")
@@ -975,6 +1007,17 @@ def main(argv: list[str] | None = None) -> int:
                      help="(por defecto) extracción local; Claude entra después vía enrich")
     mlp.set_defaults(func=cmd_mail_capture)
 
+    ai = sub.add_parser("ai", help="interruptor de emergencia: apaga toda la IA (modo manual supervisado)")
+    aisub = ai.add_subparsers(dest="ai_command")
+    ai.set_defaults(func=cmd_ai, ai_command="status", reason=None)
+    aip = aisub.add_parser("off", help="APAGA Claude y toda automatización; la memoria no se toca")
+    aip.add_argument("--reason", help="motivo, queda en el registro")
+    aip.set_defaults(func=cmd_ai)
+    aip = aisub.add_parser("on", help="reactiva la IA restaurando la política previa")
+    aip.set_defaults(func=cmd_ai, reason=None)
+    aip = aisub.add_parser("status", help="estado del interruptor")
+    aip.set_defaults(func=cmd_ai, reason=None)
+
     p = sub.add_parser("refresh", help="mantiene el cerebro al día: fuentes, Google, correo, áreas, brief")
     p.add_argument("--quiet", action="store_true")
     p.add_argument("--skip", action="append", help="omitir un paso (sources|google|mail|areas|enrich|brief)")
@@ -1140,6 +1183,10 @@ def main(argv: list[str] | None = None) -> int:
     p.set_defaults(func=cmd_serve)
 
     args = parser.parse_args(argv)
+    # el interruptor de IA se resuelve por proceso a partir de la base elegida
+    os.environ.setdefault("SB_DB_PATH", args.db)
+    if args.db != DEFAULT_DB:
+        os.environ["SB_DB_PATH"] = args.db
     return args.func(args)
 
 

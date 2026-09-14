@@ -71,10 +71,10 @@ usa nombres cortos y reconocibles; si algo no calza, colección «Por revisar».
 
 
 def claude_grouping(documents) -> list[dict]:
-    import anthropic
+    from ..ai import client as ai_client
 
     digests = [_doc_digest(d) for d in documents[:MAX_DOCS]]
-    client = anthropic.Anthropic()
+    client = ai_client()
     response = client.messages.create(
         model=os.environ.get("SB_MODEL", "claude-opus-5"),
         max_tokens=16000,
@@ -102,8 +102,9 @@ def organize(store, prefer_llm: bool = True) -> list[dict]:
     documents = store.list_documents()
     if not documents:
         return []
+    from ..ai import is_off
     collections = None
-    if prefer_llm:
+    if prefer_llm and not is_off():
         try:
             import anthropic  # noqa: F401
             collections = claude_grouping(documents)

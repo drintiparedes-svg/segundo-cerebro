@@ -236,6 +236,12 @@ def projects_payload(store, params: dict) -> list:
     return out
 
 
+def ai_payload(store, params: dict) -> dict:
+    from .ai import status
+    brain_dir = _brain_dir(store)
+    return status(brain_dir) if brain_dir else {"enabled": True, "mode": "demo"}
+
+
 def status_payload(store, params: dict) -> dict:
     """Última sincronización, si hay una en curso, tamaño de la memoria y
     política LLM — para la cabecera de la pestaña Hoy."""
@@ -297,6 +303,7 @@ ROUTES = {
     "/api/sources/suggest": sources_suggest_payload,
     "/api/today": today_payload,
     "/api/status": status_payload,
+    "/api/ai": ai_payload,
     "/api/week": week_payload,
     "/api/projects": projects_payload,
     "/api/config": config_payload,
@@ -462,8 +469,28 @@ def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, result
 
 
+def ai_off(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Botón de emergencia: apaga Claude y toda automatización."""
+    from .ai import switch_off
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return 400, {"error": "sin memoria local (modo demo)"}
+    data = _json_body(body) or {}
+    return 200, switch_off(brain_dir, reason=str(data.get("reason", ""))[:200])
+
+
+def ai_on(store, params: dict, body: bytes) -> tuple[int, object]:
+    from .ai import switch_on
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return 400, {"error": "sin memoria local (modo demo)"}
+    return 200, switch_on(brain_dir)
+
+
 POST_ROUTES = {
     "/api/areas/override": override_area,
+    "/api/ai/off": ai_off,
+    "/api/ai/on": ai_on,
     "/api/mail/capture": capture_mail,
     "/api/refresh": start_refresh,
     "/api/config/llm": set_llm_config,

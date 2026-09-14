@@ -23,6 +23,9 @@ Reglas:
 
 
 def llm_available() -> bool:
+    from .ai import is_off
+    if is_off():
+        return False   # interruptor de emergencia: modo manual supervisado
     try:
         import anthropic  # noqa: F401
     except ImportError:
@@ -36,9 +39,9 @@ def llm_available() -> bool:
 
 
 def answer(pack: ContextPack, model: str | None = None) -> str:
-    import anthropic
+    from .ai import client as ai_client
 
-    client = anthropic.Anthropic()
+    client = ai_client()
     response = client.messages.create(
         model=model or os.environ.get("SB_MODEL", "claude-opus-5"),
         max_tokens=16000,

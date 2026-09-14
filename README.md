@@ -55,6 +55,7 @@ sb mail capture <id> --account falp   # UN correo a la memoria, por decisión tu
 sb project import-plan Plan.xlsx --project tesis --start 2026-04-06   # plan Excel → compromisos con fecha
 sb project                  # hitos, atrasadas, vencen esta semana
 sb week                     # revisión semanal
+sb ai off                   # BOTÓN DE EMERGENCIA: apaga toda la IA → modo manual supervisado
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

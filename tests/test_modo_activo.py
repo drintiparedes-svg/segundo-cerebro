@@ -483,3 +483,93 @@ def test_api_week_projects_and_capture(store, tmp_path):
     assert st == 404
     st, res = dispatch_post(store, "/api/mail/capture", {}, b"{}")
     assert st == 400
+
+
+# ── Interruptor de emergencia de la IA ────────────────────────────────────
+
+from segundo_cerebro import ai
+from segundo_cerebro.agents.curator import organize
+from segundo_cerebro.agents.mail_triage import triage
+from segundo_cerebro.agents.writer import draft
+from segundo_cerebro.extract import get_extractor
+from segundo_cerebro.llm import llm_available
+
+
+class _FakeScheduler:
+    def __init__(self):
+        self.calls = 0
+
+    def remove(self, **kw):
+        self.calls += 1
+        return {"removed": True}
+
+
+@pytest.fixture()
+def gated(store, tmp_path, monkeypatch):
+    """La compuerta global resuelve la base de esta prueba, con credenciales
+    'presentes' para demostrar que el interruptor manda sobre ellas."""
+    monkeypatch.setenv("SB_DB_PATH", str(store.db_path))
+    monkeypatch.delenv("SB_AI_OFF", raising=False)
+    monkeypatch.setenv("ANTHROPIC_API_KEY", "sk-test-no-se-usa")
+    return tmp_path
+
+
+def test_kill_switch_blocks_every_claude_path(store, gated, monkeypatch):
+    brain = gated
+    sched = _FakeScheduler()
+    set_llm_areas(brain, ["academia", "falp"])
+    assert not ai.is_off(brain)
+
+    st = ai.switch_off(brain, reason="prueba", scheduler=sched)
+    assert st["enabled"] is False and st["mode"] == "manual supervisado"
+    assert st["reason"] == "prueba" and st["schedule_removed"] is True and sched.calls == 1
+    assert ai.is_off() and ai.marker_path(brain).exists()
+    cfg = load_config(brain)
+    assert cfg["llm"]["areas"] == [] and cfg["refresh"]["auto"] is False
+
+    # ninguna ruta llega a Claude: cliente, extractor, triaje, curador, writer, ask, enrich
+    with pytest.raises(ai.AIDisabled):
+        ai.client()
+    assert type(get_extractor(prefer_llm=True)).__name__ == "HeuristicExtractor"
+    assert llm_available() is False
+    mails = [{"id": "m", "from": "Ricardo <r@falp.org>", "subject": "urgente", "snippet": "", "labels": []}]
+    assert triage(mails, store, prefer_llm=True)[0]["score"] > 0     # heurístico, sin excepción
+    assert organize(store, prefer_llm=True), "curador local sigue funcionando"
+    md, mode = draft(store, "minuta", "oncohematológica", prefer_llm=True)
+    assert mode == "local" and md
+    res = enrich(store, brain, extractor=None)
+    assert res["skipped"].startswith("IA apagada")
+    assert (brain / "logs" / "ai-switch.log").read_text(encoding="utf-8").count("OFF") == 1
+
+    ai.switch_off(brain, reason="otra vez", scheduler=sched)   # idempotente
+    assert ai.status(brain)["reason"] == "prueba", "el primer apagado se conserva"
+
+    on = ai.switch_on(brain)
+    assert on["enabled"] is True and not ai.marker_path(brain).exists()
+    assert on["restored_llm_areas"] == ["academia", "falp"]
+    assert load_config(brain)["refresh"]["auto"] is True
+    assert not ai.is_off()
+    try:
+        ai.client()                      # ya no lo bloquea el interruptor…
+    except ai.AIDisabled:
+        pytest.fail("el interruptor sigue bloqueando tras `on`")
+    except ImportError:
+        pass                             # …solo falta el paquete anthropic en este entorno
+
+
+def test_env_override_and_status_api(store, gated, monkeypatch):
+    monkeypatch.setenv("SB_AI_OFF", "1")
+    assert ai.is_off(gated) and ai.status(gated)["env_forced"]
+    with pytest.raises(ai.AIDisabled):
+        ai.client()
+    monkeypatch.delenv("SB_AI_OFF")
+
+    st, res = dispatch(store, "/api/ai", {})
+    assert st == 200 and res["enabled"] is True
+    st, res = dispatch_post(store, "/api/ai/off", {}, json.dumps({"reason": "desde la UI"}).encode())
+    assert st == 200 and res["enabled"] is False and res["reason"] == "desde la UI"
+    st, res = dispatch(store, "/api/status", {})
+    assert res["ai"]["enabled"] is False and res["ai"]["mode"] == "manual supervisado"
+    st, res = dispatch_post(store, "/api/ai/on", {}, b"{}")
+    assert st == 200 and res["enabled"] is True
+    assert dispatch(store, "/api/ai", {})[1]["enabled"] is True

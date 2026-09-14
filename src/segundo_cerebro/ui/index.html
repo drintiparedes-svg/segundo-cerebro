@@ -101,6 +101,27 @@
     outline: none; transition: border-color .18s;
   }
   #search:focus { border-color: var(--accent); }
+  .ai-switch {
+    background: transparent; color: var(--decision); border: 1.5px solid var(--decision);
+    border-radius: 999px; padding: .35rem .8rem; font: inherit; font-size: .78rem;
+    font-weight: 600; cursor: pointer; white-space: nowrap; letter-spacing: .02em;
+  }
+  .ai-switch:hover { background: var(--decision); color: var(--bg); }
+  .ai-switch:focus-visible { outline: 2px solid var(--decision); outline-offset: 2px; }
+  .ai-switch.off { background: var(--decision); color: var(--bg); }
+  .ai-banner {
+    position: fixed; top: 3.6rem; left: 0; right: 0; z-index: 29;
+    display: flex; align-items: center; gap: 1rem; flex-wrap: wrap;
+    padding: .5rem 1.4rem; background: var(--decision); color: var(--bg);
+    font-family: "JetBrains Mono", monospace; font-size: .72rem; letter-spacing: .08em;
+    text-transform: uppercase;
+  }
+  .ai-banner[hidden], .demo-note[hidden] { display: none; }
+  body.ai-off aside { top: calc(3.6rem + 2.2rem); }   /* el banner no tapa las pestañas */
+  .ai-banner button {
+    background: var(--bg); color: var(--decision); border: 0; border-radius: 999px;
+    padding: .2rem .7rem; font: inherit; font-size: .7rem; font-weight: 600; cursor: pointer;
+  }
   #search::placeholder { color: var(--ink-faint); }
 
   /* ── grafo ─────────────────────────────────────────────────────────── */
@@ -311,7 +332,9 @@
   <div class="wordmark">Segundo <em>Cerebro</em></div>
   <div class="tagline">personal cognitive os</div>
   <input id="search" type="search" placeholder="Buscar en la memoria…" autocomplete="off">
+  <button id="ai-switch" class="ai-switch" title="Apagar toda la IA y volver a modo manual supervisado" onclick="toggleAI()">⏻ IA</button>
 </header>
+<div id="ai-banner" class="ai-banner" hidden></div>
 
 <canvas id="graph" aria-label="Grafo de conocimiento"></canvas>
 
@@ -545,6 +568,7 @@ async function loadData() {
   }
   initSim();
   renderTab();
+  loadAI();
 }
 
 /* ── simulación force-directed (canvas, sin dependencias) ─────────────── */
@@ -1014,6 +1038,54 @@ function renderTab() {
   }
 }
 
+/* ── interruptor de emergencia de la IA ───────────────────────────────── */
+let aiState = { enabled: true };
+
+function renderAI() {
+  const btn = document.getElementById("ai-switch");
+  const banner = document.getElementById("ai-banner");
+  const off = aiState && aiState.enabled === false;
+  btn.classList.toggle("off", off);
+  document.body.classList.toggle("ai-off", off);
+  btn.textContent = off ? "⏻ IA apagada" : "⏻ IA";
+  btn.title = off ? "Reactivar la IA" : "Apagar toda la IA y volver a modo manual supervisado";
+  banner.hidden = !off;
+  if (off) {
+    const since = aiState.off_at ? ` · desde ${esc(aiState.off_at.replace("T", " "))}` : "";
+    banner.innerHTML = `<span>Modo manual supervisado · IA apagada${since} · nada sale de tu equipo ni corre solo</span>
+      <button onclick="toggleAI()">Reactivar IA</button>`;
+  }
+}
+
+async function loadAI() {
+  if (demoMode) { renderAI(); return; }
+  try { aiState = await api("/api/ai"); } catch { aiState = { enabled: true }; }
+  renderAI();
+}
+
+async function toggleAI() {
+  const off = aiState && aiState.enabled === false;
+  if (!off) {
+    const ok = confirm("APAGAR LA IA\n\nSe detiene toda llamada a Claude (extracción, triaje, borradores, preguntas) y toda automatización (tarea programada, enriquecimiento). El sistema queda en modo manual supervisado: solo lo que tú ejecutes, 100% local.\n\nTu memoria no se toca. Puedes reactivar cuando quieras.\n\n¿Apagar ahora?");
+    if (!ok) return;
+    const reason = prompt("Motivo (opcional, queda en el registro):", "") || "";
+    if (demoMode) { aiState = { enabled: false, off_at: new Date().toISOString().slice(0, 16), reason }; renderAI(); renderTab(); return; }
+    try {
+      const res = await fetch("/api/ai/off", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ reason }) });
+      aiState = await res.json();
+    } catch (err) { alert("No pude apagar la IA: " + err.message); return; }
+  } else {
+    if (!confirm("Reactivar la IA (modo asistido). Se restaura la política de Claude por área; la tarea programada no se reinstala sola.\n\n¿Reactivar?")) return;
+    if (demoMode) { aiState = { enabled: true }; renderAI(); renderTab(); return; }
+    try {
+      const res = await fetch("/api/ai/on", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+      aiState = await res.json();
+    } catch (err) { alert("No pude reactivar la IA: " + err.message); return; }
+  }
+  renderAI();
+  renderTab();
+}
+
 /* ── memoria: decisiones / compromisos / timeline ─────────────────────── */
 function renderMemory() {
   const byFilter = {
@@ -1066,7 +1138,8 @@ function syncLine(st) {
   const bad = st.last && st.last.ok === false ? " · con errores (ver .brain/logs/)" : "";
   const counts = st.counts && st.counts.documents != null
     ? ` · ${st.counts.documents} docs · ${st.counts.kos} KOs` : "";
-  return `<div class="sync-line" id="sync-line">${esc(when)}${esc(bad)}${esc(counts)}
+  const manual = (aiState && aiState.enabled === false) ? " · manual: solo a pedido" : "";
+  return `<div class="sync-line" id="sync-line">${esc(when)}${esc(bad)}${esc(counts)}${esc(manual)}
     <button class="doc-back" style="margin:0 0 0 .6rem;padding:.1rem .5rem;font-size:.7rem"
       ${st.running ? "disabled" : ""} onclick="refreshNow()">${st.running ? "…" : "Actualizar ahora"}</button></div>`;
 }
@@ -1319,6 +1392,12 @@ async function renderLlmConfig() {
   }
   const never = new Set(cfg.llm.never || []);
   const on = new Set(cfg.llm.areas || []);
+  const aiOff = aiState && aiState.enabled === false;
+  if (aiOff) {
+    box.innerHTML = `<div class="empty" style="padding:0">IA apagada (modo manual supervisado): ninguna área usa Claude.
+      Reactívala con el botón <b>⏻ IA</b> para volver a elegir.</div>`;
+    return;
+  }
   box.innerHTML = `<div class="empty" style="padding:0 0 .4rem">Heurística local para todo. Claude (sin entrenamiento)
     solo en las áreas marcadas; <b>clínica</b> queda siempre fuera.</div>` +
     areasList.map(a => `<label class="rel-line" style="cursor:${never.has(a.id) ? "not-allowed" : "pointer"};opacity:${never.has(a.id) ? ".5" : "1"}">

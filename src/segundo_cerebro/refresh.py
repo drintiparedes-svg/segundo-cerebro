@@ -214,8 +214,10 @@ def status(store, brain_dir: str | Path) -> dict:
         counts["kos"] = store.conn.execute("SELECT COUNT(*) FROM knowledge_objects").fetchone()[0]
     except Exception:
         pass
+    from .ai import status as ai_status
     return {"running": is_locked(brain_dir), "last": last, "minutes_ago": minutes,
             "counts": counts, "llm": cfg["llm"], "refresh": cfg["refresh"],
+            "ai": ai_status(brain_dir),
             "next_due": (datetime.fromisoformat(last["finished"])
                          + timedelta(hours=cfg["refresh"]["every_hours"])
                          ).isoformat(timespec="minutes") if last and last.get("finished") else None}

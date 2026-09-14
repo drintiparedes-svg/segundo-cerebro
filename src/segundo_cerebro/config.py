@@ -14,7 +14,7 @@ from pathlib import Path
 
 DEFAULTS: dict = {
     "refresh": {"every_hours": 4, "triage_days": 7, "days_back": 30,
-                "days_forward": 30},
+                "days_forward": 30, "auto": True},
     "llm": {"default": "local", "areas": [], "never": ["clinica"],
             "max_docs_per_run": 40},
     "advisor": {"recent_days": 90, "max_files_per_folder": 5000,
