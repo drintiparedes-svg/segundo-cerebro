@@ -152,9 +152,33 @@ class ChatsConnector(_FileImportConnector):
         return import_export(store, path, alias=config.get("alias"))
 
 
+class EuropePMCConnector(Connector):
+    spec = ConnectorSpec(
+        id="europepmc", name="Europe PMC (búsqueda guardada)", kind="api", privacy="read-cloud",
+        description="Literatura abierta con DOI/PMID; solo viajan tus términos.",
+        config_schema={"query": {"type": "str", "required": True, "help": "términos"},
+                       "open_only": {"type": "bool", "required": False, "help": "solo open access"}},
+        setup_hint='sb literature watch "hpv self-sampling" --source europepmc')
+
+    def sync(self, store) -> SyncResult:
+        from .literature import sync as lit_sync
+        added = lit_sync(store, self.config["query"], limit=int(self.config.get("limit") or 15),
+                         open_only=bool(self.config.get("open_only")))
+        return SyncResult(added=added)
+
+
+def _validated_types():
+    from .clinicaltrials import ClinicalTrialsConnector
+    from .funding import FundingConnector
+    from .guidelines import GuidelinesConnector
+    from .pubmed import PubMedConnector
+    return (PubMedConnector, ClinicalTrialsConnector, GuidelinesConnector, FundingConnector)
+
+
 BUILTIN: dict[str, type[Connector]] = {
     c.spec.id: c for c in (LocalFolderConnector, GoogleDriveConnector, GoogleCalendarConnector,
-                           GmailTriageConnector, ZoteroConnector, ChatsConnector)
+                           GmailTriageConnector, ZoteroConnector, ChatsConnector,
+                           EuropePMCConnector, *_validated_types())
 }
 GOOGLE_TYPES = ("gdrive", "gcalendar", "gmail")
 

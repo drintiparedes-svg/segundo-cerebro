@@ -63,6 +63,9 @@ presentarme al sponsor de X?") se responden desde el grafo.
   ([docs/17](17-carga-y-autonomia.md))
 - ✅ Producto · Fase C: matriz de autonomía, bandeja con deshacer, escritura
   Google opt-in y agentes de flujo (docs/17)
+- ✅ Producto · Fase D: PubMed / ClinicalTrials / guías RSS con procedencia,
+  radar de financiamiento verificado, indicadores y lente financiera
+  ([docs/18](18-fuentes-validadas-y-finanzas.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - ✅ Human approval gate (bandeja) · ✅ borradores de correo y preparación de
   reuniones · ✅ autonomía gradual por categoría de acción

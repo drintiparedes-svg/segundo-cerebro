@@ -382,6 +382,82 @@ def cmd_ai(args) -> int:
     return 0
 
 
+def cmd_literature_watch(args) -> int:
+    """Búsqueda guardada = instancia de conector; sb refresh la sincroniza."""
+    from .connectors import registry
+    config = {"query": args.query}
+    if args.source == "europepmc" and args.open_only:
+        config["open_only"] = True
+    inst = registry.add_instance(_brain_dir(args), args.source, config, key=args.query)
+    print(f"Búsqueda guardada: {inst['id']} ({args.source}) → «{args.query}»")
+    if not args.no_sync:
+        summary = registry.sync_instances(_store(args), _brain_dir(args), only=[inst["id"]])
+        r = summary["instances"].get(inst["id"], {})
+        print(f"Sincronizada: nuevos {r.get('added', 0)}" + (f" · {r['error']}" if r.get("error") else ""))
+        _auto_assign(args, _store(args))
+    return 0
+
+
+def cmd_funding(args) -> int:
+    from .connectors.funding import radar
+    from .connectors.registry import load_instances
+    brain_dir = _brain_dir(args)
+    sources = [{"name": i["config"].get("name") or i["config"]["url"], "url": i["config"]["url"]}
+               for i in load_instances(brain_dir)["instances"] if i["type"] == "funding" and i.get("enabled", True)]
+    r = radar(_store(args), brain_dir, sources=None if args.offline else sources, check_urls=not args.offline)
+    c = r["counts"]
+    print(f"Radar: abiertas {c['abierta']} · cerradas {c['cerrada']} · sin verificar {c['sin verificar']}"
+          + (" (modo offline: solo por fecha)" if args.offline else ""))
+    for call in r["calls"]:
+        mark = {"abierta": "✔", "cerrada": "–", "sin verificar": "?"}[call.status]
+        print(f"  {mark} {call.status:<14} {call.deadline or '????-??-??'}  {call.name[:60]}"
+              + (f"  ({call.note})" if call.note else ""))
+    for k, v in r["errors"].items():
+        print(f"  ✘ {k}: {v}")
+    print(f"Informe: {r['report']} · Oportunidades abiertas en la memoria: {r['open']}")
+    return 0
+
+
+def cmd_indicators(args) -> int:
+    from .connectors.indicators import get_indicators
+    data = get_indicators(_brain_dir(args), offline=args.offline)
+    if not data.get("values"):
+        print("Sin indicadores (sin red y sin caché). " + str(data.get("error") or ""), file=sys.stderr)
+        return 1
+    stale = " (caché)" if data.get("stale") or args.offline else ""
+    print(f"Indicadores {data.get('retrieved_at', '')[:10]}{stale} · fuente: {data.get('source')}")
+    for k, v in data["values"].items():
+        print(f"  {v['name']:<28} {v['value']:>12,.2f} {v['unit']}  ({v['date']})")
+    return 0
+
+
+def cmd_project_finance(args) -> int:
+    from .connectors.indicators import get_indicators
+    from .finance import import_actuals, import_budget, project_finance
+    from .projects import load_projects
+    projects = {p.id: p for p in load_projects()}
+    project = projects.get(args.project)
+    if project is None:
+        print(f"Proyecto «{args.project}» no está en brain/self/projects.md", file=sys.stderr)
+        return 1
+    brain_dir = _brain_dir(args)
+    budget_path = args.budget or project.budget_sheet
+    if budget_path:
+        b = import_budget(brain_dir, project.id, Path(budget_path).expanduser())
+        print(f"Presupuesto importado: {len(b['items'])} ítems · total {b['total']:,.0f} {b['currency']} (hoja «{b['sheet']}»)")
+    if args.actuals:
+        a = import_actuals(brain_dir, project.id, Path(args.actuals).expanduser())
+        print(f"Ejecución importada: {len(a['rows'])} movimientos · {a['total']:,.0f}")
+    indicators = get_indicators(brain_dir, offline=True)
+    result = project_finance(_store(args), brain_dir, project, indicators)
+    print(result["markdown"])
+    if args.save:
+        from .agents import save_report
+        path = save_report(brain_dir, f"finanzas-{project.id}", result["markdown"])
+        print(f"\nGuardado en {path}")
+    return 0
+
+
 def cmd_autonomy(args) -> int:
     from . import autonomy
     brain_dir = _brain_dir(args)
@@ -1193,6 +1269,13 @@ def main(argv: list[str] | None = None) -> int:
     pjp.add_argument("--area", help="forzar área")
     pjp.set_defaults(func=cmd_project_import)
 
+    pjp = pjsub.add_parser("finance", help="lente financiera: presupuesto, ejecución, unidades económicas, impacto")
+    pjp.add_argument("project")
+    pjp.add_argument("--budget", help="xlsx con hoja «Presupuesto» (o budget_sheet en projects.md)")
+    pjp.add_argument("--actuals", help="csv/xlsx de gasto real")
+    pjp.add_argument("--save", action="store_true")
+    pjp.set_defaults(func=cmd_project_finance)
+
     p = sub.add_parser("week", help="revisión semanal: decisiones, cierres, atrasos, hitos")
     p.add_argument("--save", action="store_true", help="guardar en .brain/reports/")
     p.set_defaults(func=cmd_week)
@@ -1205,6 +1288,14 @@ def main(argv: list[str] | None = None) -> int:
     mlp.add_argument("--no-llm", action="store_true", default=True,
                      help="(por defecto) extracción local; Claude entra después vía enrich")
     mlp.set_defaults(func=cmd_mail_capture)
+
+    p = sub.add_parser("funding", help="radar de financiamiento: solo convocatorias verificables como abiertas")
+    p.add_argument("--offline", action="store_true", help="sin red: verifica solo por fecha")
+    p.set_defaults(func=cmd_funding)
+
+    p = sub.add_parser("indicators", help="UF, dólar, euro, IPC, UTM (mindicador.cl, caché 24 h)")
+    p.add_argument("--offline", action="store_true")
+    p.set_defaults(func=cmd_indicators)
 
     au = sub.add_parser("autonomy", help="matriz de autonomía: qué corre solo, qué se propone, qué nunca")
     ausub = au.add_subparsers(dest="autonomy_command")
@@ -1388,6 +1479,13 @@ def main(argv: list[str] | None = None) -> int:
     lp.add_argument("--open-only", action="store_true")
     lp.add_argument("--no-llm", action="store_true")
     lp.set_defaults(func=cmd_literature)
+    lp = lsub.add_parser("watch", help="búsqueda guardada que sb refresh sincroniza (PubMed, Europe PMC, ClinicalTrials)")
+    lp.add_argument("query")
+    lp.add_argument("--source", choices=["pubmed", "europepmc", "clinicaltrials"], default="pubmed")
+    lp.add_argument("--open-only", action="store_true")
+    lp.add_argument("--no-sync", action="store_true")
+    lp.set_defaults(func=cmd_literature_watch)
+
     lp = lsub.add_parser("verify", help="valida las referencias de un documento (informe, no edita)")
     lp.add_argument("file")
     lp.set_defaults(func=cmd_literature_verify)

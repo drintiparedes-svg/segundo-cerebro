@@ -45,6 +45,10 @@ class Project:
     milestones: list[Milestone] = field(default_factory=list)
     people: list[str] = field(default_factory=list)
     keywords: list[str] = field(default_factory=list)
+    budget_sheet: str | None = None                       # xlsx con hoja «Presupuesto»
+    currency: str = "CLP"
+    units: list[dict] = field(default_factory=list)       # [{name, volume, price?, fixed_cost?, variable_cost?}]
+    benefits: list[dict] = field(default_factory=list)    # [{name, value_clp, per: year|month, basis}]
 
 
 def _iso(value) -> str | None:
@@ -86,6 +90,9 @@ def load_projects(path: str | Path = DEFAULT_PROJECTS_FILE) -> list[Project]:
             milestones=[ms for ms in milestones if ms.due],
             people=[str(x) for x in raw.get("people", []) or []],
             keywords=[str(k).lower() for k in raw.get("keywords", []) or []],
+            budget_sheet=raw.get("budget_sheet"), currency=str(raw.get("currency") or "CLP"),
+            units=[dict(u) for u in raw.get("units", []) or [] if isinstance(u, dict)],
+            benefits=[dict(b) for b in raw.get("benefits", []) or [] if isinstance(b, dict)],
         ))
     return projects
 

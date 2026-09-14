@@ -75,6 +75,14 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
         lines.append("## Proyectos especiales")
         lines.extend(project_brief(store, projects, today))
 
+    # ── financiamiento: convocatorias abiertas que cierran pronto ────────
+    opps = sorted((k for k in store.list_knowledge_objects(ko_type="opportunity", status="active", limit=100)
+                   if k.valid_to and k.valid_to <= str(today + timedelta(days=30))), key=lambda k: k.valid_to)
+    if opps:
+        lines.append("## Financiamiento (cierra en 30 días)")
+        lines += [f"- {o.valid_to} · **{o.title}**" + (f" [{o.project}]" if o.project else "") for o in opps[:6]]
+        lines.append("")
+
     # ── personas clave (fijadas por ti) ──────────────────────────────────
     from .people import key_people_brief
     key = key_people_brief(store, brain_dir, today)

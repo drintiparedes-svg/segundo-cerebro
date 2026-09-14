@@ -16,6 +16,14 @@ projects:
     deadline: 2026-12-15
     people: [Inti]
     keywords: [tesis, thesis, hpv, vph, self-sampling, packaging]
+    # lente financiera (sb project finance tesis --budget PlanTrabajo.xlsx)
+    currency: CLP
+    units:
+      - { name: "kit de autotoma entregado", volume: 500 }
+      - { name: "mujer tamizada", volume: 400 }
+    benefits:
+      - { name: "Tamizajes ganados vs. consulta presencial", value_clp: 4800000, per: year,
+          basis: "400 tamizajes × $12.000 de costo evitado por consulta (supuesto a validar)" }
     milestones:
       - { name: "Informe de insights Fase 1", due: 2026-05-03 }
       - { name: "Prototipo packaging + agente IA", due: 2026-06-07 }

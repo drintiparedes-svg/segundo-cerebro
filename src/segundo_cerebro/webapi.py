@@ -149,7 +149,10 @@ def doc_payload(store, params: dict) -> dict:
         f"https://doi.org/{meta['doi']}" if meta.get("doi") else None)
     return {"found": True, "id": doc.id, "title": doc.title, "date": doc.date,
             "doc_type": doc.doc_type, "path": doc.path, "area": doc.area,
-            "body": doc.body[:60_000], "web_link": link}
+            "body": doc.body[:60_000], "web_link": link,
+            "validated": bool(meta.get("validated")), "pmid": meta.get("pmid"),
+            "doi": meta.get("doi"), "nct": meta.get("nct"),
+            "retrieved_at": meta.get("retrieved_at"), "connector_id": doc.connector_id}
 
 
 def _brain_dir(store) -> Path | None:
@@ -234,6 +237,28 @@ def projects_payload(store, params: dict) -> list:
                                         "due": st["next_milestone"].due}
                                        if st["next_milestone"] else None)})
     return out
+
+
+def finance_payload(store, params: dict) -> dict:
+    from .connectors.indicators import get_indicators
+    from .finance import project_finance
+    from .projects import load_projects
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"projects": []}
+    indicators = get_indicators(brain_dir, offline=True)
+    projects = load_projects()
+    if params.get("project"):
+        projects = [p for p in projects if p.id == params["project"]]
+    return {"projects": [project_finance(store, brain_dir, p, indicators) for p in projects],
+            "indicators": indicators.get("values", {}), "indicators_at": indicators.get("retrieved_at")}
+
+
+def funding_payload(store, params: dict) -> dict:
+    if store is None:
+        return {"opportunities": []}
+    opps = store.list_knowledge_objects(ko_type="opportunity", status="active", limit=200)
+    return {"opportunities": [asdict(o) for o in sorted(opps, key=lambda o: o.valid_to or "9999")]}
 
 
 def autonomy_payload(store, params: dict) -> dict:
@@ -348,6 +373,8 @@ ROUTES = {
     "/api/connectors": connectors_payload,
     "/api/workload": workload_payload,
     "/api/autonomy": autonomy_payload,
+    "/api/finance": finance_payload,
+    "/api/funding": funding_payload,
     "/api/queue": queue_payload,
     "/api/week": week_payload,
     "/api/projects": projects_payload,

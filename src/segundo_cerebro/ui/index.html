@@ -507,6 +507,18 @@ const DEMO = {
     unscheduled: [{ id: "u1", title: "Revisión sistemática (30 h)", effort_h: 30, valid_to: "2026-10-01" }],
     totals: { capacity_h: 47.5, meetings_h: 11.5, planned_h: 16.4, tasks: 6, unscheduled: 1, overloaded_days: ["2026-09-15"] },
   },
+  finance: {
+    indicators: { uf: { value: 39412.18 }, dolar: { value: 942.3 } },
+    projects: [{
+      project: { id: "tesis", name: "MSc Thesis" }, has_budget: true,
+      unit_economics: { currency: "CLP", budget_total: 614350, spent: 318000, execution_pct: 52, remaining: 296350, budget_usd: 652,
+        by_phase: { "F1": { budget: 250000, spent: 236000, execution_pct: 94 }, "F2": { budget: 198000, spent: 82000, execution_pct: 41 }, "F3": { budget: 110500, spent: 0, execution_pct: 0 } },
+        units: [{ unit: "kit de autotoma entregado", volume: 500, cost_planned: 1229, cost_real: 1420, deviation_pct: 16 }, { unit: "mujer tamizada", volume: 400, cost_planned: 1536, cost_real: null, deviation_pct: null }] },
+      impact: { annual_benefit: 4800000, horizon_months: 12, net: 4185650, roi_pct: 681, payback_months: 1.5 },
+      alerts: [{ kind: "ejecución", text: "Fase F1: 94 % del presupuesto ejecutado" }, { kind: "costo unitario", text: "kit de autotoma entregado: costo real 1.420 vs plan 1.229 (+16 %)" }],
+      opportunities: [{ valid_to: "2026-09-26", title: "ANID · Fondecyt de Iniciación" }],
+    }],
+  },
   queue: {
     summary: { pending: 2, executed: 2, suggested: 1, rejected: 0, undone: 0, manual: 0, failed: 0 },
     items: [
@@ -1123,6 +1135,7 @@ async function viewDoc(id) {
     <div class="meta" style="font-family:'JetBrains Mono',monospace;font-size:.68rem;color:var(--ink-faint);margin:.2rem 0 .6rem">
       ${esc(doc.date || "")}${doc.area ? " · área " + esc(doc.area) : ""}
     </div>
+    ${doc.validated ? `<div class="who" style="margin-bottom:.4rem"><span class="priv local" style="color:var(--chart-tasks);border-color:var(--chart-tasks)">✔ fuente validada</span> ${esc([doc.pmid && "PMID " + doc.pmid, doc.doi && "DOI " + doc.doi, doc.nct && doc.nct].filter(Boolean).join(" · "))}${doc.retrieved_at ? " · consultada " + esc(doc.retrieved_at.slice(0, 10)) : ""}</div>` : ""}
     ${doc.path ? `<div class="who" style="margin-bottom:.6rem">📄 ${esc(doc.path)}</div>` : ""}
     ${doc.web_link ? `<div class="who" style="margin-bottom:.6rem"><a class="src" href="${esc(doc.web_link)}" target="_blank" rel="noopener">Abrir enlace externo ↗</a></div>` : ""}
     <div class="doc-body">${esc(doc.body || "(sin contenido de texto)")}</div>`;
@@ -1290,10 +1303,56 @@ async function refreshNow() {
 function todayNav() {
   return `<div class="sub-nav">
     <button class="${todayView === "today" ? "active" : ""}" onclick="todayView='today';renderToday()">Hoy</button>
-    <button class="${todayView === "week" ? "active" : ""}" onclick="todayView='week';renderToday()">Semana</button></div>`;
+    <button class="${todayView === "week" ? "active" : ""}" onclick="todayView='week';renderToday()">Semana</button>
+    <button class="${todayView === "finance" ? "active" : ""}" onclick="todayView='finance';renderToday()">Finanzas</button></div>`;
+}
+
+function financeCard(f) {
+  const ue = f.unit_economics, imp = f.impact;
+  const cur = ue.currency || "CLP";
+  const fmt = v => (v == null ? "—" : Math.round(v).toLocaleString("es-CL") + " " + cur);
+  const pct = ue.execution_pct == null ? 0 : Math.min(100, ue.execution_pct);
+  const phases = Object.entries(ue.by_phase || {}).map(([ph, v]) =>
+    `<div class="rel-line"><span class="rt">${esc(ph)}</span><span>${fmt(v.budget)}</span><span class="window">${v.execution_pct != null ? v.execution_pct + " %" : "sin gasto"}</span></div>`).join("");
+  const units = (ue.units || []).map(u =>
+    `<div class="rel-line"><span class="rt">unidad</span><span>${esc(u.unit)} × ${u.volume}</span><span class="window">${fmt(u.cost_planned)}${u.cost_real ? " → " + fmt(u.cost_real) : ""}</span></div>`).join("");
+  const impact = imp && imp.net != null
+    ? `<div class="area-stats" style="margin-top:.4rem"><span>beneficio anual <b>${fmt(imp.annual_benefit)}</b></span><span>neto <b>${fmt(imp.net)}</b></span><span>ROI <b>${imp.roi_pct} %</b></span>${imp.payback_months ? `<span>payback <b>${imp.payback_months} m</b></span>` : ""}</div>`
+    : `<div class="who">Sin beneficios definidos: edita <code>benefits</code> en projects.md.</div>`;
+  const alerts = (f.alerts || []).map(a => `<div class="who" style="color:var(--person)">⚠ ${esc(a.text)}</div>`).join("");
+  const opps = (f.opportunities || []).map(o => `<div class="who">💰 cierra ${esc(o.valid_to)} · ${esc(o.title)}</div>`).join("");
+  return `<div class="area-card">
+    <div class="area-head"><h3>${esc(f.project.name)}</h3></div>
+    ${f.has_budget ? `<div class="area-stats"><span>presupuesto <b>${fmt(ue.budget_total)}</b></span><span>ejecutado <b>${fmt(ue.spent)}</b>${ue.execution_pct != null ? ` (${ue.execution_pct} %)` : ""}</span>${ue.budget_usd ? `<span>≈ ${Math.round(ue.budget_usd).toLocaleString("es-CL")} USD</span>` : ""}</div>
+      <div class="area-bar"><i style="width:${pct}%;background:var(--chart-tasks)"></i></div>${phases}${units}${impact}`
+      : `<div class="who">Sin presupuesto importado: <code>sb project finance ${esc(f.project.id)} --budget Plan.xlsx</code></div>`}
+    ${alerts}${opps}
+  </div>`;
+}
+
+async function renderFinance() {
+  if (demoMode) {
+    panelBody.innerHTML = syncLine({ running: false, minutes_ago: 12, counts: { documents: 33, kos: 67 } }) + todayNav()
+      + DEMO.finance.projects.map(financeCard).join("")
+      + `<div class="sync-line">UF ${DEMO.finance.indicators.uf.value.toLocaleString("es-CL")} · USD ${DEMO.finance.indicators.dolar.value.toLocaleString("es-CL")} (mindicador.cl, caché 24 h)</div>`;
+    return;
+  }
+  panelBody.innerHTML = `<h2>Finanzas</h2><div class="empty">Calculando…</div>`;
+  try {
+    const [res, st] = await Promise.all([api("/api/finance"), api("/api/status").catch(() => null)]);
+    const ind = res.indicators || {};
+    const line = ind.uf ? `<div class="sync-line">UF ${Math.round(ind.uf.value).toLocaleString("es-CL")} · USD ${Math.round(ind.dolar ? ind.dolar.value : 0).toLocaleString("es-CL")} (mindicador.cl · ${esc((res.indicators_at || "").slice(0, 10))})</div>`
+      : `<div class="sync-line">Sin indicadores en caché: <code>sb indicators</code></div>`;
+    panelBody.innerHTML = syncLine(st) + todayNav()
+      + (res.projects.length ? res.projects.map(financeCard).join("") : `<div class="empty">Sin proyectos en <code>brain/self/projects.md</code>.</div>`)
+      + line;
+  } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
+  }
 }
 
 async function renderToday() {
+  if (todayView === "finance") return renderFinance();
   if (demoMode) {
     const md = todayView === "week" ? DEMO.week : DEMO.today;
     panelBody.innerHTML = syncLine({ running: false, minutes_ago: 12, counts: { documents: 33, kos: 67 } })

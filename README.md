@@ -31,6 +31,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave, `sb refresh` programado, Claude por área, captura manual de correo, proyectos/tesis y revisión semanal |
 | [16 · Conectores](docs/16-conectores.md) | Connector SDK: conectar, probar, sincronizar y desconectar fuentes con purga de sus datos |
 | [17 · Carga y autonomía](docs/17-carga-y-autonomia.md) | cockpit de carga (hoy + 7 días), esfuerzo inferido y ajustable, matriz de autonomía |
+| [18 · Fuentes validadas y finanzas](docs/18-fuentes-validadas-y-finanzas.md) | PubMed, ClinicalTrials.gov, guías RSS, radar de financiamiento verificado, indicadores, lente financiera |
 
 ## Quickstart
 
@@ -65,6 +66,9 @@ sb task done <id>           # cerrar un compromiso (effort / move / due para aju
 sb autonomy                 # qué corre solo, qué se propone, qué nunca (techo por acción)
 sb queue                    # bandeja: aprobar, rechazar, deshacer · sb flows corre los agentes
 sb google connect falp --write   # opt-in: bloques en Calendar y borradores en Gmail (nunca enviar)
+sb literature watch "hpv self-sampling" --source pubmed   # búsqueda guardada, con PMID/DOI
+sb funding                  # radar: solo convocatorias verificables como abiertas
+sb project finance tesis --budget Plan.xlsx   # presupuesto, costo por unidad, ROI, alertas
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica
