@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .config import load_config
 
-STEPS = ["connectors", "mail", "areas", "enrich", "brief"]
+STEPS = ["connectors", "mail", "areas", "enrich", "flows", "brief"]
 LOCK_STALE_HOURS = 2
 
 
@@ -112,6 +112,15 @@ def _step_enrich(store, brain_dir: Path, cfg: dict) -> dict:
     return enrich(store, brain_dir)
 
 
+def _step_flows(store, brain_dir: Path, cfg: dict) -> dict:
+    """Agentes de flujo → bandeja (la matriz de autonomía decide)."""
+    from .agents.flows import run_flows
+    r = run_flows(store, brain_dir)
+    return {"created": len(r["created"]), "executed": len(r["executed"]),
+            "queued": len(r["queued"]), "suggested": len(r["suggested"]),
+            "manual": len(r["manual"]), "duplicates": r["duplicates"]}
+
+
 def _step_brief(store, brain_dir: Path, cfg: dict) -> dict:
     from .agents import save_report
     from .areas import load_areas
@@ -124,7 +133,8 @@ def _step_brief(store, brain_dir: Path, cfg: dict) -> dict:
 
 DEFAULT_RUNNERS = {
     "connectors": _step_connectors, "mail": _step_mail,
-    "areas": _step_areas, "enrich": _step_enrich, "brief": _step_brief,
+    "areas": _step_areas, "enrich": _step_enrich, "flows": _step_flows,
+    "brief": _step_brief,
 }
 
 

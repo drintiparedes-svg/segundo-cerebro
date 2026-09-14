@@ -105,12 +105,17 @@ def cmd_export(args) -> int:
 
 def cmd_google_connect(args) -> int:
     from .connectors.google_auth import GoogleAuthError, get_credentials
+    write = bool(getattr(args, "write", False))
+    if write:
+        print("Vas a autorizar ESCRITURA opt-in: crear/borrar eventos propios en Calendar y "
+              "crear/borrar borradores en Gmail. Nunca enviar correo. Se pide en el navegador.")
     try:
-        get_credentials(args.alias, interactive=True)
+        get_credentials(args.alias, interactive=True, write=write)
     except GoogleAuthError as exc:
         print(exc, file=sys.stderr)
         return 1
-    print(f"Cuenta «{args.alias}» autorizada. Sincroniza con: sb google sync")
+    print(f"Cuenta «{args.alias}» autorizada{' con escritura' if write else ''}. "
+          "Sincroniza con: sb google sync")
     return 0
 
 
@@ -374,6 +379,74 @@ def cmd_ai(args) -> int:
     if not st["enabled"]:
         print(f"  desde {st.get('off_at') or '?'} · motivo: {st.get('reason') or '—'}"
               + (" · forzado por SB_AI_OFF" if st.get("env_forced") else ""))
+    return 0
+
+
+def cmd_autonomy(args) -> int:
+    from . import autonomy
+    brain_dir = _brain_dir(args)
+    if args.autonomy_command == "set":
+        try:
+            level = autonomy.set_level(brain_dir, args.action, args.level)
+        except (KeyError, ValueError) as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"{args.action} → {level} ({autonomy.LEVEL_NAMES[level]})")
+        return 0
+    rows = autonomy.matrix(brain_dir)
+    from .ai import is_off
+    if is_off(brain_dir):
+        print("IA APAGADA: todo acotado a L2 (nada corre solo).\n")
+    print(f"{'acción':<20} {'nivel':<5} {'techo':<5} {'clase':<5} descripción")
+    for r in rows:
+        eff = r["effective"] + ("*" if r["effective"] != r["level"] else "")
+        print(f"{r['id']:<20} {eff:<5} {r['ceiling']:<5} {r['class']:<5} {r['name']} — {r['description']}")
+    print("\nL0 observar · L1 sugerir · L2 borrador (bandeja) · L3 automático interno · "
+          "L3+ externo reversible · L4 irreversible: siempre aprobación.")
+    print("Cambiar: sb autonomy set <acción> <nivel>   (nunca por encima del techo)")
+    return 0
+
+
+def cmd_queue(args) -> int:
+    from . import queue
+    brain_dir = _brain_dir(args)
+    cmd = args.queue_command
+    if cmd in ("approve", "reject", "undo"):
+        try:
+            if cmd == "approve":
+                item = queue.approve(brain_dir, _store(args), args.id)
+            elif cmd == "reject":
+                item = queue.reject(brain_dir, args.id, reason=args.reason or "")
+            else:
+                item = queue.undo(brain_dir, _store(args), args.id)
+        except KeyError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"{item['id']} → {item['status']}" + (f" · {item['result']}" if item.get("result") else ""))
+        return 0
+    items = queue.list_items(brain_dir, status=args.status)
+    if not items:
+        print("Bandeja vacía." if not args.status else f"Sin ítems «{args.status}».")
+        return 0
+    for i in items[:50]:
+        print(f"[{i['status']:<9}] {i['id']}  {i['level']:<3} {i['action']:<18} {i['title'][:70]}")
+        if i.get("rationale"):
+            print(f"{'':<12}   ↳ {i['rationale']}")
+        if i.get("result") and i["result"].get("hint"):
+            print(f"{'':<12}   ↳ {i['result']['hint']}")
+    print("\nsb queue approve <id> · reject <id> · undo <id>")
+    return 0
+
+
+def cmd_flows(args) -> int:
+    from .agents.flows import run_flows
+    r = run_flows(_store(args), _brain_dir(args))
+    print(f"Agentes de flujo: {len(r['created'])} ítems nuevos · ejecutados {len(r['executed'])} · "
+          f"en bandeja {len(r['queued'])} · sugeridos {len(r['suggested'])} · manuales {len(r['manual'])} · "
+          f"repetidos {r['duplicates']}")
+    for it in r["queued"] + r["manual"]:
+        print(f"  [{it['status']}] {it['title']}")
+    print("Revisa: sb queue")
     return 0
 
 
@@ -1133,6 +1206,32 @@ def main(argv: list[str] | None = None) -> int:
                      help="(por defecto) extracción local; Claude entra después vía enrich")
     mlp.set_defaults(func=cmd_mail_capture)
 
+    au = sub.add_parser("autonomy", help="matriz de autonomía: qué corre solo, qué se propone, qué nunca")
+    ausub = au.add_subparsers(dest="autonomy_command")
+    au.set_defaults(func=cmd_autonomy, autonomy_command="show")
+    aup = ausub.add_parser("set", help="fija el nivel de una acción (≤ techo)")
+    aup.add_argument("action")
+    aup.add_argument("level")
+    aup.set_defaults(func=cmd_autonomy)
+
+    qu = sub.add_parser("queue", help="bandeja de aprobación: aprobar, rechazar, deshacer")
+    qusub = qu.add_subparsers(dest="queue_command")
+    qu.set_defaults(func=cmd_queue, queue_command="list", status=None)
+    qup = qusub.add_parser("list", help="listar (opcional: --status pending|executed|…)")
+    qup.add_argument("--status")
+    qup.set_defaults(func=cmd_queue)
+    for name in ("approve", "undo"):
+        qup = qusub.add_parser(name)
+        qup.add_argument("id")
+        qup.set_defaults(func=cmd_queue)
+    qup = qusub.add_parser("reject")
+    qup.add_argument("id")
+    qup.add_argument("--reason")
+    qup.set_defaults(func=cmd_queue)
+
+    p = sub.add_parser("flows", help="corre los agentes de flujo ahora (preparación, foco, respuestas, semana)")
+    p.set_defaults(func=cmd_flows)
+
     p = sub.add_parser("carga", help="carga de hoy y proyección de 7 días (agenda + tareas vs jornada)")
     p.add_argument("--days", type=int, default=7)
     p.set_defaults(func=cmd_carga)
@@ -1331,6 +1430,8 @@ def main(argv: list[str] | None = None) -> int:
 
     gp = gsub.add_parser("connect", help="autoriza una cuenta Gmail (abre el navegador)")
     gp.add_argument("alias", help="nombre corto de la cuenta: personal, falp, …")
+    gp.add_argument("--write", action="store_true",
+                    help="además: crear eventos y borradores (reversible; nunca enviar)")
     gp.set_defaults(func=cmd_google_connect)
 
     gp = gsub.add_parser("accounts", help="lista cuentas conectadas")

@@ -325,6 +325,24 @@
   .task-row button { background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; color: var(--ink-dim); cursor: pointer; font-size: .72rem; padding: .1rem .4rem; }
   .task-row button:hover { color: var(--ink); border-color: var(--accent); }
   .task-row.overdue .t { color: var(--decision); }
+  .lvl { font-family: "JetBrains Mono", monospace; font-size: .62rem; padding: .05rem .45rem; border-radius: 999px; border: 1px solid currentColor; white-space: nowrap; }
+  .lvl.L0, .lvl.L1 { color: var(--ink-dim); }
+  .lvl.L2 { color: var(--project); }
+  .lvl.L3 { color: var(--chart-tasks); }
+  .lvl.L3x { color: var(--person); }
+  .lvl.L4 { color: var(--decision); }
+  .q-item { padding: .6rem 0; border-bottom: 1px solid var(--line); }
+  .q-item .meta { display: flex; gap: .5rem; align-items: baseline; font-family: "JetBrains Mono", monospace; font-size: .66rem; color: var(--ink-faint); margin-bottom: .15rem; }
+  .q-item .title { font-size: .88rem; }
+  .q-item .acts { display: flex; gap: .3rem; margin-top: .35rem; }
+  .q-item .acts button { background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; color: var(--ink-dim); cursor: pointer; font-size: .72rem; padding: .15rem .5rem; }
+  .q-item .acts button:hover { color: var(--ink); border-color: var(--accent); }
+  .q-item .acts button.ok { color: var(--chart-tasks); border-color: var(--chart-tasks); }
+  .q-item pre { white-space: pre-wrap; font-family: "JetBrains Mono", monospace; font-size: .72rem; color: var(--ink-dim); background: var(--surface-2); border-radius: .4rem; padding: .4rem .6rem; margin: .3rem 0 0; max-height: 9rem; overflow: auto; }
+  .matrix-row { display: grid; grid-template-columns: 1fr auto; gap: .5rem; align-items: center; padding: .45rem 0; border-bottom: 1px solid var(--line); }
+  .matrix-row .n { font-size: .86rem; }
+  .matrix-row small { display: block; color: var(--ink-faint); font-size: .72rem; }
+  .matrix-row select { background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: .4rem; padding: .2rem .4rem; font: inherit; font-size: .74rem; }
   .priv { font-family: "JetBrains Mono", monospace; font-size: .6rem; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .4rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-faint); }
   .priv.local { color: var(--project); border-color: var(--project); }
   .priv.read-cloud { color: var(--organization); border-color: var(--organization); }
@@ -387,6 +405,7 @@
     <button data-tab="memory">Memoria</button>
     <button data-tab="mail">Correo</button>
     <button data-tab="sources">Conectores</button>
+    <button data-tab="auto">Auto</button>
     <button data-tab="ask">Preguntar</button>
   </nav>
   <div id="panel-body"></div>
@@ -488,6 +507,26 @@ const DEMO = {
     unscheduled: [{ id: "u1", title: "Revisión sistemática (30 h)", effort_h: 30, valid_to: "2026-10-01" }],
     totals: { capacity_h: 47.5, meetings_h: 11.5, planned_h: 16.4, tasks: 6, unscheduled: 1, overloaded_days: ["2026-09-15"] },
   },
+  queue: {
+    summary: { pending: 2, executed: 2, suggested: 1, rejected: 0, undone: 0, manual: 0, failed: 0 },
+    items: [
+      { id: "act-1", status: "pending", level: "L2", action: "meeting_prep", title: "Preparar «Reunión comité de datos» (2026-09-15)", rationale: "reunión mañana con Ricardo, Raimundo", created_at: "2026-09-14T08:02:00", payload: { kind: "prep", markdown: "# Preparación · Reunión comité de datos\n\n## Ricardo\n- [task] Preparar propuesta de variables mínimas\n- [question] ¿Qué estándar de interoperabilidad?\n\n## Agenda propuesta\n1. Variables mínimas (Ricardo)\n2. Estándar de interoperabilidad" }, result: null },
+      { id: "act-2", status: "executed", level: "L3+", action: "focus_block", title: "Bloque de foco: Informe de usabilidad v1 (2026-09-14, 1.9 h)", rationale: "vence 2026-09-12; esfuerzo 1.9 h", created_at: "2026-09-14T08:02:00", payload: { account: "falp", summary: "Foco · Informe de usabilidad v1", start: "2026-09-14T09:00:00", end: "2026-09-14T10:54:00" }, result: { event_id: "ev1", undo: { event_id: "ev1" } } },
+      { id: "act-3", status: "executed", level: "L3+", action: "mail_reply_draft", title: "Borrador de respuesta a Ricardo (FALP): Aprobación base oncohematológica", rationale: "correo P1 de una persona fijada", created_at: "2026-09-14T08:02:00", payload: { account: "falp", to: "Ricardo (FALP)", subject: "Re: Aprobación base oncohematológica", body: "Hola Ricardo,\n\nGracias por tu correo…" }, result: { draft_id: "dr1", undo: { draft_id: "dr1" } } },
+      { id: "act-4", status: "pending", level: "L2", action: "send_email", title: "Enviar confirmación a comité", rationale: "irreversible: siempre aprobación", created_at: "2026-09-14T08:03:00", payload: { to: "comite@falp.org" }, result: null },
+      { id: "act-5", status: "suggested", level: "L1", action: "suggest_people", title: "Fijar a Ana Soto como persona clave", rationale: "2 correos P2 en la semana", created_at: "2026-09-14T08:03:00", payload: {}, result: null },
+    ],
+  },
+  autonomy: [
+    { id: "sync_sources", name: "Sincronizar fuentes", description: "Traer lo nuevo de carpetas, Drive, Calendar…", class: "L0", level: "L0", effective: "L0", ceiling: "L3", options: ["L0","L1","L2","L3"], irreversible: false },
+    { id: "classify_areas", name: "Clasificar por área", description: "Etiquetar con tu mapa de áreas", class: "L3", level: "L3", effective: "L3", ceiling: "L3", options: ["L0","L1","L2","L3"], irreversible: false },
+    { id: "daily_brief", name: "Brief diario", description: "Generar «Tu día»", class: "L3", level: "L3", effective: "L3", ceiling: "L3", options: ["L0","L1","L2","L3"], irreversible: false },
+    { id: "meeting_prep", name: "Preparar reuniones", description: "Dossier + agenda 24 h antes", class: "L2", level: "L2", effective: "L2", ceiling: "L3", options: ["L0","L1","L2","L3"], irreversible: false },
+    { id: "focus_block", name: "Bloque de foco en Calendar", description: "Reservar tiempo para lo que vence", class: "L3+", level: "L3+", effective: "L3+", ceiling: "L3+", options: ["L0","L1","L2","L3","L3+"], irreversible: false },
+    { id: "mail_reply_draft", name: "Borrador de respuesta en Gmail", description: "Responder P1 de personas fijadas (no se envía)", class: "L3+", level: "L3+", effective: "L3+", ceiling: "L3+", options: ["L0","L1","L2","L3","L3+"], irreversible: false },
+    { id: "send_email", name: "Enviar correo", description: "Enviar desde tu cuenta", class: "L4", level: "L2", effective: "L2", ceiling: "L2", options: ["L0","L1","L2"], irreversible: true },
+    { id: "delete_data", name: "Borrar", description: "Eliminar archivos, eventos o correos", class: "L4", level: "L2", effective: "L2", ceiling: "L2", options: ["L0","L1","L2"], irreversible: true },
+  ],
   connectors: [
     { id: "localfs:Tesis-2026", type: "localfs", type_name: "Carpeta local", kind: "local", privacy: "local", label: "Tesis 2026", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 14, last_result: { added: 0, unchanged: 14 } },
     { id: "gdrive:falp", type: "gdrive", type_name: "Google Drive", kind: "cloud", privacy: "read-cloud", label: "falp", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 22, last_result: { added: 2, unchanged: 0 } },
@@ -608,6 +647,9 @@ let sourcesData = null;     // {sources, ignored}
 let suggestionsData = null; // [{path, name, verdict, …}]
 let connectorsData = null;  // {instances, types}
 let workloadData = null;    // plan de 7 días
+let queueData = null;       // {items, summary}
+let autonomyData = null;    // {matrix, levels}
+let autoView = "queue";     // queue | matrix
 let loadDay = 0;            // día seleccionado en Carga
 let memFilter = "decisions";
 let todayView = "today";     // today | week
@@ -1091,6 +1133,7 @@ function renderTab() {
   if (selected) return renderNode(selected);
   if (tab === "today") return renderToday();
   if (tab === "load") return renderWorkload();
+  if (tab === "auto") return renderAuto();
   if (tab === "areas") return renderAreas();
   if (tab === "people") return renderPeople();
   if (tab === "memory") return renderMemory();
@@ -1233,7 +1276,7 @@ async function refreshNow() {
         clearInterval(refreshPoll);
         try { graph = await api("/api/graph"); initSim(); kos = await api("/api/kos"); } catch {}
         try { areasData = await api("/api/areas"); mail = await api("/api/mail"); } catch {}
-        peopleData = null; sourcesData = null; workloadData = null;
+        peopleData = null; sourcesData = null; workloadData = null; queueData = null;
         if (tab === "today" && !selected) renderToday();
       } else {
         const el = document.getElementById("sync-line");
@@ -1391,6 +1434,123 @@ async function applySource(path, accept) {
     connectorsData = null;
     renderSources(true);
   } catch { /* servidor no disponible */ }
+}
+
+/* ── automatización: bandeja + matriz ─────────────────────────────────── */
+const LEVEL_LABEL = { L0: "observar", L1: "sugerir", L2: "borrador", L3: "automático", "L3+": "externo reversible", L4: "irreversible" };
+const lvlClass = l => "lvl " + (l === "L3+" ? "L3x" : l);
+
+async function loadAuto(force) {
+  if (demoMode) {
+    if (!queueData) queueData = JSON.parse(JSON.stringify(DEMO.queue));
+    if (!autonomyData) autonomyData = { matrix: JSON.parse(JSON.stringify(DEMO.autonomy)) };
+    return;
+  }
+  if (!queueData || force) queueData = await api("/api/queue");
+  if (!autonomyData || force) autonomyData = await api("/api/autonomy");
+}
+
+function demoQueueAction(action, id) {
+  const it = queueData.items.find(x => x.id === id);
+  if (!it) return;
+  if (action === "approve") { it.status = it.action === "send_email" ? "manual" : "executed"; it.result = it.status === "manual" ? { hint: "sin ejecutor: hazlo tú" } : { undo: {} }; }
+  if (action === "reject") it.status = "rejected";
+  if (action === "undo") it.status = "undone";
+  const s = queueData.summary; for (const k in s) s[k] = queueData.items.filter(x => x.status === k).length;
+}
+
+async function queueAction(action, id) {
+  if (action === "reject" && !confirm("¿Rechazar este ítem?")) return;
+  if (demoMode) { demoQueueAction(action, id); renderAuto(); return; }
+  try {
+    const res = await fetch(`/api/queue/${action}`, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id }) });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    queueData = { items: data.items, summary: data.summary };
+    renderAuto();
+  } catch (err) { alert("Error: " + err.message); }
+}
+
+async function runFlows() {
+  const box = document.getElementById("auto-msg");
+  if (demoMode) { if (box) box.textContent = "Simulación (demo): en tu instancia corre sb flows (preparación, foco, respuestas, semana)."; return; }
+  if (box) box.textContent = "Corriendo agentes de flujo…";
+  try {
+    const res = await fetch("/api/queue/run", { method: "POST", headers: { "Content-Type": "application/json" }, body: "{}" });
+    const data = await res.json();
+    queueData = { items: data.items, summary: data.summary };
+    renderAuto();
+    const b2 = document.getElementById("auto-msg");
+    if (b2) b2.textContent = `Nuevos: ${data.run.created.length} · ejecutados ${data.run.executed.length} · en bandeja ${data.run.queued.length} · repetidos ${data.run.duplicates}`;
+  } catch (err) { if (box) box.textContent = "Error: " + err.message; }
+}
+
+async function setAutonomy(action, level) {
+  if (demoMode) { const r = autonomyData.matrix.find(x => x.id === action); if (r) { r.level = level; r.effective = level; } renderAuto(); return; }
+  try {
+    const res = await fetch("/api/autonomy/set", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ action, level }) });
+    const data = await res.json();
+    if (data.error) { alert(data.error); await loadAuto(true); renderAuto(); return; }
+    autonomyData = data;
+    renderAuto();
+  } catch (err) { alert("Error: " + err.message); }
+}
+
+function queueItem(it) {
+  const acts = [];
+  if (it.status === "pending" || it.status === "suggested" || it.status === "failed") {
+    acts.push(`<button class="ok" onclick="queueAction('approve', '${esc(it.id)}')">Aprobar</button>`);
+    acts.push(`<button onclick="queueAction('reject', '${esc(it.id)}')">Rechazar</button>`);
+  }
+  if (it.status === "executed" && it.result && it.result.undo) acts.push(`<button onclick="queueAction('undo', '${esc(it.id)}')">Deshacer</button>`);
+  const preview = it.payload && (it.payload.markdown || it.payload.body)
+    ? `<pre>${esc((it.payload.markdown || it.payload.body).slice(0, 900))}</pre>` : "";
+  const hint = it.result && it.result.hint ? `<div class="who">↳ ${esc(it.result.hint)}</div>` : "";
+  const err = it.result && it.result.error ? `<div class="who" style="color:var(--decision)">✘ ${esc(it.result.error)}</div>` : "";
+  return `<div class="q-item">
+    <div class="meta"><span class="${lvlClass(it.level)}">${esc(it.level)}</span><span>${esc(it.status)}</span><span>${esc((it.created_at || "").slice(0, 16).replace("T", " "))}</span><span>${esc(it.action)}</span></div>
+    <div class="title">${esc(it.title)}</div>
+    ${it.rationale ? `<div class="who">${esc(it.rationale)}</div>` : ""}
+    ${preview}${hint}${err}
+    ${acts.length ? `<div class="acts">${acts.join("")}</div>` : ""}
+  </div>`;
+}
+
+function matrixRow(r) {
+  const aiOff = aiState && aiState.enabled === false;
+  return `<div class="matrix-row">
+    <div class="n"><span class="${lvlClass(r.class)}">${esc(r.class)}</span> ${esc(r.name)}${r.irreversible ? " · <b>siempre aprobación</b>" : ""}
+      <small>${esc(r.description)} · techo ${esc(r.ceiling)}${aiOff && r.effective !== r.level ? " · IA apagada → " + esc(r.effective) : ""}</small></div>
+    <select onchange="setAutonomy('${esc(r.id)}', this.value)" ${r.irreversible && r.options.length <= 1 ? "disabled" : ""}>
+      ${r.options.map(o => `<option value="${o}" ${o === r.level ? "selected" : ""}>${o} · ${LEVEL_LABEL[o]}</option>`).join("")}
+    </select>
+  </div>`;
+}
+
+async function renderAuto() {
+  panelBody.innerHTML = `<h2>Automatización</h2><div class="empty">Cargando…</div>`;
+  try { await loadAuto(); } catch (err) { panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return; }
+  const s = queueData.summary || {};
+  const nav = `<div class="sub-nav">
+    <button class="${autoView === "queue" ? "active" : ""}" onclick="autoView='queue';renderAuto()">Bandeja${s.pending ? ` (${s.pending})` : ""}</button>
+    <button class="${autoView === "matrix" ? "active" : ""}" onclick="autoView='matrix';renderAuto()">Matriz de autonomía</button></div>`;
+  if (autoView === "matrix") {
+    panelBody.innerHTML = `<h2>Automatización</h2>${nav}
+      <div class="empty" style="padding:0 0 .6rem">L0 observar · L1 sugerir · L2 borrador (bandeja) · L3 automático interno con deshacer ·
+        L3+ externo reversible en tus cuentas · L4 irreversible: siempre aprobación. Nunca por encima del techo.</div>
+      ${autonomyData.matrix.map(matrixRow).join("")}`;
+    return;
+  }
+  const pending = queueData.items.filter(i => i.status === "pending" || i.status === "suggested");
+  const done = queueData.items.filter(i => i.status !== "pending" && i.status !== "suggested");
+  panelBody.innerHTML = `<h2>Automatización</h2>${nav}
+    <div class="sync-line" style="display:flex;gap:.6rem;align-items:center;flex-wrap:wrap">
+      pendientes ${s.pending || 0} · ejecutados ${s.executed || 0} · sugeridos ${s.suggested || 0}
+      <button class="doc-back" style="margin:0;padding:.1rem .5rem;font-size:.7rem" onclick="runFlows()">Correr agentes ahora</button></div>
+    <div id="auto-msg" class="who"></div>
+    ${pending.length ? pending.map(queueItem).join("") : `<div class="empty">Nada espera tu aprobación.</div>`}
+    ${done.length ? `<div class="node-type" style="margin-top:1rem">historial</div>` + done.slice(0, 20).map(queueItem).join("") : ""}
+    <div class="sync-line" style="margin-top:.8rem">Registro completo en <code>.brain/logs/actions.log</code>. Escritura en tus cuentas solo con <code>sb google connect &lt;alias&gt; --write</code>.</div>`;
 }
 
 /* ── carga: hoy y 7 días ──────────────────────────────────────────────── */

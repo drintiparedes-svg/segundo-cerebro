@@ -61,10 +61,11 @@ presentarme al sponsor de X?") se responden desde el grafo.
   y purga ([docs/16](16-conectores.md))
 - ✅ Producto · Fase B: cockpit de carga — hoy y proyección de 7 días
   ([docs/17](17-carga-y-autonomia.md))
+- ✅ Producto · Fase C: matriz de autonomía, bandeja con deshacer, escritura
+  Google opt-in y agentes de flujo (docs/17)
 - Orquestador + agentes (research, strategy, project, executive, writing)
-- Human approval gate para toda acción externa
-- Acciones: borradores de correo, preparación de reuniones, informes
-- Autonomía gradual por categoría de acción
+- ✅ Human approval gate (bandeja) · ✅ borradores de correo y preparación de
+  reuniones · ✅ autonomía gradual por categoría de acción
 
 **Criterio de salida:** al menos un flujo semanal completo (p. ej.
 preparación de reunión de gerencia) corre end-to-end con aprobación humana.

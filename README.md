@@ -62,6 +62,9 @@ sb connect add localfs --path ~/Documentos/Proyectos   # conectar una fuente (SD
 sb connect remove localfs:Proyectos --purge          # desconectar y borrar lo que aportó
 sb carga                    # ¿cabe lo que tengo que hacer? agenda + tareas vs jornada, 7 días
 sb task done <id>           # cerrar un compromiso (effort / move / due para ajustarlo)
+sb autonomy                 # qué corre solo, qué se propone, qué nunca (techo por acción)
+sb queue                    # bandeja: aprobar, rechazar, deshacer · sb flows corre los agentes
+sb google connect falp --write   # opt-in: bloques en Calendar y borradores en Gmail (nunca enviar)
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

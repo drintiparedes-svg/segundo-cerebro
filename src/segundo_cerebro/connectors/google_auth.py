@@ -26,6 +26,24 @@ SCOPES = [
     "https://www.googleapis.com/auth/calendar.readonly",
     "https://www.googleapis.com/auth/gmail.readonly",
 ]
+# Escritura opt-in (`sb google connect <alias> --write`): crear/borrar eventos
+# propios y borradores de Gmail. Nunca enviar, nunca borrar correo ajeno.
+WRITE_SCOPES = [
+    "https://www.googleapis.com/auth/calendar.events",
+    "https://www.googleapis.com/auth/gmail.compose",
+]
+
+
+def has_write_scope(alias: str, base: str | Path | None = None) -> bool:
+    """¿El token de la cuenta incluye los permisos de escritura opt-in?"""
+    path = google_dir(base) / f"token-{alias}.json"
+    if not path.exists():
+        return False
+    try:
+        scopes = set(json.loads(path.read_text()).get("scopes") or [])
+    except (json.JSONDecodeError, OSError):
+        return False
+    return all(s in scopes for s in WRITE_SCOPES)
 
 DEFAULT_GOOGLE_DIR = Path(".brain/google")
 
@@ -49,9 +67,10 @@ def list_accounts(base: str | Path | None = None) -> list[str]:
 
 
 def get_credentials(alias: str, base: str | Path | None = None,
-                    interactive: bool = False):
+                    interactive: bool = False, write: bool = False):
     """Credenciales para una cuenta. Con interactive=True lanza el flujo
-    OAuth en el navegador (primera vez por cuenta)."""
+    OAuth en el navegador (primera vez por cuenta). Con write=True pide
+    además los permisos de escritura opt-in (re-autorización explícita)."""
     try:
         from google.auth.transport.requests import Request
         from google.oauth2.credentials import Credentials
@@ -64,10 +83,15 @@ def get_credentials(alias: str, base: str | Path | None = None,
     gdir = google_dir(base)
     token_path = gdir / f"token-{alias}.json"
     secret_path = gdir / "client_secret.json"
+    scopes = SCOPES + (WRITE_SCOPES if write else [])
 
     creds = None
-    if token_path.exists():
-        creds = Credentials.from_authorized_user_file(str(token_path), SCOPES)
+    if token_path.exists() and not (write and interactive):
+        if write and not has_write_scope(alias, base):
+            raise GoogleAuthError(
+                f"La cuenta «{alias}» no tiene permisos de escritura. "
+                f"Autorízalos explícitamente: sb google connect {alias} --write")
+        creds = Credentials.from_authorized_user_file(str(token_path), scopes)
 
     if creds and creds.expired and creds.refresh_token:
         creds.refresh(Request())
@@ -85,7 +109,7 @@ def get_credentials(alias: str, base: str | Path | None = None,
                 "(Desktop app) en Google Cloud Console y guárdala ahí. "
                 "Guía: docs/07-conectores-google.md"
             )
-        flow = InstalledAppFlow.from_client_secrets_file(str(secret_path), SCOPES)
+        flow = InstalledAppFlow.from_client_secrets_file(str(secret_path), scopes)
         # Abre el navegador; sirve para autorizar cualquiera de tus Gmail.
         creds = flow.run_local_server(port=0, prompt="consent")
         token_path.write_text(creds.to_json())
@@ -94,10 +118,10 @@ def get_credentials(alias: str, base: str | Path | None = None,
 
 
 def build_service(api: str, version: str, alias: str,
-                  base: str | Path | None = None):
+                  base: str | Path | None = None, write: bool = False):
     from googleapiclient.discovery import build
 
-    creds = get_credentials(alias, base=base)
+    creds = get_credentials(alias, base=base, write=write)
     return build(api, version, credentials=creds, cache_discovery=False)
 
 

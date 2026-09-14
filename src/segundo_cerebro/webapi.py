@@ -236,6 +236,23 @@ def projects_payload(store, params: dict) -> list:
     return out
 
 
+def autonomy_payload(store, params: dict) -> dict:
+    from .autonomy import LEVEL_NAMES, matrix
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"matrix": [], "levels": LEVEL_NAMES}
+    return {"matrix": matrix(brain_dir), "levels": LEVEL_NAMES}
+
+
+def queue_payload(store, params: dict) -> dict:
+    from .queue import list_items, summary
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"items": [], "summary": {}}
+    items = list_items(brain_dir, status=params.get("status"))
+    return {"items": items[:100], "summary": summary(brain_dir)}
+
+
 def workload_payload(store, params: dict) -> dict:
     """Carga de hoy y proyección de 7 días (capacidad − agenda vs tareas)."""
     from .areas import load_areas
@@ -330,6 +347,8 @@ ROUTES = {
     "/api/ai": ai_payload,
     "/api/connectors": connectors_payload,
     "/api/workload": workload_payload,
+    "/api/autonomy": autonomy_payload,
+    "/api/queue": queue_payload,
     "/api/week": week_payload,
     "/api/projects": projects_payload,
     "/api/config": config_payload,
@@ -495,6 +514,44 @@ def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, result
 
 
+def set_autonomy(store, params: dict, body: bytes) -> tuple[int, object]:
+    from .autonomy import set_level
+    data = _json_body(body)
+    if data is None or not data.get("action") or not data.get("level"):
+        return 400, {"error": "faltan action y level"}
+    brain_dir = _brain_dir(store) or Path(".brain")
+    try:
+        set_level(brain_dir, data["action"], data["level"])
+    except (KeyError, ValueError) as exc:
+        return 403, {"error": str(exc)}
+    return 200, autonomy_payload(store, {})
+
+
+def queue_action(action: str):
+    def handler(store, params: dict, body: bytes) -> tuple[int, object]:
+        from . import queue
+        brain_dir = _brain_dir(store)
+        if brain_dir is None:
+            return 400, {"error": "sin memoria local (modo demo)"}
+        data = _json_body(body) or {}
+        try:
+            if action == "run":
+                from .agents.flows import run_flows
+                result = {"run": run_flows(store, brain_dir)}
+            elif action == "approve":
+                result = {"item": queue.approve(brain_dir, store, data.get("id", ""))}
+            elif action == "reject":
+                result = {"item": queue.reject(brain_dir, data.get("id", ""), data.get("reason", ""))}
+            elif action == "undo":
+                result = {"item": queue.undo(brain_dir, store, data.get("id", ""))}
+            else:
+                return 404, {"error": "acción desconocida"}
+        except KeyError as exc:
+            return 404, {"error": str(exc)}
+        return 200, {**result, **queue_payload(store, {})}
+    return handler
+
+
 def update_ko(store, params: dict, body: bytes) -> tuple[int, object]:
     """Edición manual de un compromiso: cerrar, esfuerzo, vencimiento, día
     planificado (con `fixed` el planificador lo respeta)."""
@@ -587,6 +644,11 @@ POST_ROUTES = {
     "/api/ai/off": ai_off,
     "/api/ai/on": ai_on,
     "/api/kos/update": update_ko,
+    "/api/autonomy/set": set_autonomy,
+    "/api/queue/run": queue_action("run"),
+    "/api/queue/approve": queue_action("approve"),
+    "/api/queue/reject": queue_action("reject"),
+    "/api/queue/undo": queue_action("undo"),
     "/api/connectors/add": connector_action("add"),
     "/api/connectors/test": connector_action("test"),
     "/api/connectors/sync": connector_action("sync"),
