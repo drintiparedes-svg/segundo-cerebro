@@ -103,6 +103,8 @@ class KnowledgeObject:
     valid_from: str | None = None
     valid_to: str | None = None
     area: str | None = None
+    effort_h: float | None = None       # esfuerzo estimado/ajustado (horas)
+    scheduled_for: str | None = None    # día planificado (YYYY-MM-DD)
 
     def to_json(self) -> str:
         return json.dumps(asdict(self), ensure_ascii=False)

@@ -21,6 +21,8 @@
     --edge: #2c3550;
     --glow: #e0b45833;
     --decision: #e46a6a;
+    --chart-agenda: #8e7cd8;
+    --chart-tasks: #2fa892;
   }
   @media (prefers-color-scheme: light) {
     :root:not([data-theme="dark"]) {
@@ -41,6 +43,8 @@
       --edge: #c4cddc;
       --glow: #a97c1d22;
       --decision: #c2434f;
+      --chart-agenda: #5b4aa8;
+      --chart-tasks: #0e8b74;
     }
   }
   :root[data-theme="light"] {
@@ -61,6 +65,8 @@
     --edge: #c4cddc;
     --glow: #a97c1d22;
     --decision: #c2434f;
+    --chart-agenda: #5b4aa8;
+    --chart-tasks: #0e8b74;
   }
 
   * { box-sizing: border-box; }
@@ -154,12 +160,12 @@
   }
 
   nav {
-    display: flex; border-bottom: 1px solid var(--line);
+    display: flex; flex-wrap: wrap; border-bottom: 1px solid var(--line);
   }
   nav button {
-    flex: 1; padding: .7rem .15rem;
+    flex: 1 0 auto; padding: .7rem .3rem;
     background: none; border: 0; border-bottom: 2px solid transparent;
-    color: var(--ink-dim); font: inherit; font-size: .76rem; cursor: pointer;
+    color: var(--ink-dim); font: inherit; font-size: .74rem; cursor: pointer;
   }
   nav button:hover { color: var(--ink); }
   nav button:focus-visible { outline: 2px solid var(--accent); outline-offset: -2px; }
@@ -301,6 +307,24 @@
   .verdict.conectar { color: var(--project); border-color: var(--project); }
   .verdict.revisar { color: var(--person); border-color: var(--person); }
   .verdict.ignorar { color: var(--ink-faint); }
+  .load-strip { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; align-items: end; height: 120px; margin: .4rem 0 .2rem; }
+  .load-col { display: flex; flex-direction: column; justify-content: flex-end; height: 100%; gap: 2px; cursor: pointer; }
+  .load-col .seg { width: 100%; border-radius: 0; }
+  .load-col .seg.agenda { background: var(--chart-agenda); }
+  .load-col .seg.tasks { background: var(--chart-tasks); border-radius: 4px 4px 0 0; }
+  .load-col .seg.over { background: var(--decision); }
+  .load-col .track { flex: 1; background: var(--surface-2); border-radius: 4px 4px 0 0; }
+  .load-labels { display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; font-family: "JetBrains Mono", monospace; font-size: .62rem; color: var(--ink-faint); text-align: center; }
+  .load-labels .sel { color: var(--accent); }
+  .load-legend { display: flex; gap: 1rem; font-size: .72rem; color: var(--ink-dim); margin: .5rem 0 .2rem; }
+  .load-legend i { display: inline-block; width: .7rem; height: .7rem; border-radius: 2px; vertical-align: -1px; margin-right: .3rem; }
+  .task-row { display: flex; align-items: center; gap: .5rem; padding: .4rem 0; border-bottom: 1px solid var(--line); font-size: .85rem; }
+  .task-row .t { flex: 1; min-width: 0; }
+  .task-row .t small { display: block; color: var(--ink-faint); font-family: "JetBrains Mono", monospace; font-size: .64rem; }
+  .task-row input { width: 3.4rem; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: .4rem; padding: .15rem .3rem; font: inherit; font-size: .76rem; text-align: right; }
+  .task-row button { background: var(--surface); border: 1px solid var(--line); border-radius: .4rem; color: var(--ink-dim); cursor: pointer; font-size: .72rem; padding: .1rem .4rem; }
+  .task-row button:hover { color: var(--ink); border-color: var(--accent); }
+  .task-row.overdue .t { color: var(--decision); }
   .priv { font-family: "JetBrains Mono", monospace; font-size: .6rem; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .4rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-faint); }
   .priv.local { color: var(--project); border-color: var(--project); }
   .priv.read-cloud { color: var(--organization); border-color: var(--organization); }
@@ -357,6 +381,7 @@
 <aside id="panel" class="open">
   <nav>
     <button data-tab="today" class="active">Hoy</button>
+    <button data-tab="load">Carga</button>
     <button data-tab="areas">Áreas</button>
     <button data-tab="people">Personas</button>
     <button data-tab="memory">Memoria</button>
@@ -442,6 +467,27 @@ const DEMO = {
     { path: "~/Escritorio/Tesis 2026", alias: "Tesis 2026", last_sync: "2026-09-09T08:00:00Z", available: true },
     { path: "~/Escritorio/FALP", alias: "FALP", last_sync: "2026-09-09T08:00:00Z", available: true },
   ],
+  workload: {
+    today: "2026-09-14",
+    workday: { start: "08:30", end: "18:00", focus_ratio: 0.6 },
+    days: [
+      { date: "2026-09-14", weekday: "lun", capacity_h: 9.5, meetings_h: 3.0, planned_h: 3.9, free_h: 0, load_pct: 73, overloaded: false,
+        items: [{ id: "d1", title: "Propuesta de variables mínimas", effort_h: 2.0, effort_origin: "ajustado", valid_to: "2026-09-15", area: "falp", overdue: false, fixed: false },
+                { id: "d2", title: "Informe de usabilidad v1", effort_h: 1.9, effort_origin: "plan", valid_to: "2026-09-12", area: "academia", overdue: true, fixed: false }] },
+      { date: "2026-09-15", weekday: "mar", capacity_h: 9.5, meetings_h: 5.0, planned_h: 6.5, free_h: 0, load_pct: 121, overloaded: true,
+        items: [{ id: "d3", title: "Análisis temático Fase 2", effort_h: 6.5, effort_origin: "plan", valid_to: "2026-09-15", area: "academia", overdue: false, fixed: false }] },
+      { date: "2026-09-16", weekday: "mié", capacity_h: 9.5, meetings_h: 1.0, planned_h: 4.0, free_h: 1.1, load_pct: 53, overloaded: false,
+        items: [{ id: "d4", title: "Revisar minuta comité de datos", effort_h: 1.0, effort_origin: "tipo", valid_to: null, area: "falp", overdue: false, fixed: false },
+                { id: "d5", title: "Preparar taller co-diseño", effort_h: 3.0, effort_origin: "histórico", valid_to: "2026-09-19", area: "academia", overdue: false, fixed: true }] },
+      { date: "2026-09-17", weekday: "jue", capacity_h: 9.5, meetings_h: 2.0, planned_h: 2.0, free_h: 2.5, load_pct: 42, overloaded: false,
+        items: [{ id: "d6", title: "Pitch MediSmart v3", effort_h: 2.0, effort_origin: "ajustado", valid_to: "2026-09-25", area: "medismart", overdue: false, fixed: false }] },
+      { date: "2026-09-18", weekday: "vie", capacity_h: 9.5, meetings_h: 0.5, planned_h: 0, free_h: 5.4, load_pct: 5, overloaded: false, items: [] },
+      { date: "2026-09-19", weekday: "sáb", capacity_h: 0, meetings_h: 0, planned_h: 0, free_h: 0, load_pct: 0, overloaded: false, items: [] },
+      { date: "2026-09-20", weekday: "dom", capacity_h: 0, meetings_h: 0, planned_h: 0, free_h: 0, load_pct: 0, overloaded: false, items: [] },
+    ],
+    unscheduled: [{ id: "u1", title: "Revisión sistemática (30 h)", effort_h: 30, valid_to: "2026-10-01" }],
+    totals: { capacity_h: 47.5, meetings_h: 11.5, planned_h: 16.4, tasks: 6, unscheduled: 1, overloaded_days: ["2026-09-15"] },
+  },
   connectors: [
     { id: "localfs:Tesis-2026", type: "localfs", type_name: "Carpeta local", kind: "local", privacy: "local", label: "Tesis 2026", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 14, last_result: { added: 0, unchanged: 14 } },
     { id: "gdrive:falp", type: "gdrive", type_name: "Google Drive", kind: "cloud", privacy: "read-cloud", label: "falp", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 22, last_result: { added: 2, unchanged: 0 } },
@@ -561,6 +607,8 @@ let peopleData = null;      // {people, suggested, unknown_senders}
 let sourcesData = null;     // {sources, ignored}
 let suggestionsData = null; // [{path, name, verdict, …}]
 let connectorsData = null;  // {instances, types}
+let workloadData = null;    // plan de 7 días
+let loadDay = 0;            // día seleccionado en Carga
 let memFilter = "decisions";
 let todayView = "today";     // today | week
 let selected = null;
@@ -1042,6 +1090,7 @@ async function viewDoc(id) {
 function renderTab() {
   if (selected) return renderNode(selected);
   if (tab === "today") return renderToday();
+  if (tab === "load") return renderWorkload();
   if (tab === "areas") return renderAreas();
   if (tab === "people") return renderPeople();
   if (tab === "memory") return renderMemory();
@@ -1184,7 +1233,7 @@ async function refreshNow() {
         clearInterval(refreshPoll);
         try { graph = await api("/api/graph"); initSim(); kos = await api("/api/kos"); } catch {}
         try { areasData = await api("/api/areas"); mail = await api("/api/mail"); } catch {}
-        peopleData = null; sourcesData = null;
+        peopleData = null; sourcesData = null; workloadData = null;
         if (tab === "today" && !selected) renderToday();
       } else {
         const el = document.getElementById("sync-line");
@@ -1342,6 +1391,114 @@ async function applySource(path, accept) {
     connectorsData = null;
     renderSources(true);
   } catch { /* servidor no disponible */ }
+}
+
+/* ── carga: hoy y 7 días ──────────────────────────────────────────────── */
+async function loadWorkload(force) {
+  if (demoMode) {
+    if (!workloadData) workloadData = JSON.parse(JSON.stringify(DEMO.workload));
+    return workloadData;
+  }
+  if (!workloadData || force) workloadData = await api("/api/workload");
+  return workloadData;
+}
+
+function demoRecalc() {
+  for (const d of workloadData.days) {
+    d.planned_h = Math.round(d.items.reduce((a, i) => a + Number(i.effort_h || 0), 0) * 10) / 10;
+    const focus = Math.max(0, (d.capacity_h - d.meetings_h) * 0.6);
+    d.free_h = Math.max(0, Math.round((focus - d.planned_h) * 10) / 10);
+    d.load_pct = d.capacity_h ? Math.round(100 * (d.meetings_h + d.planned_h) / d.capacity_h) : 0;
+    d.overloaded = d.planned_h > focus + 1e-9;
+  }
+  workloadData.totals.tasks = workloadData.days.reduce((a, d) => a + d.items.length, 0);
+  workloadData.totals.overloaded_days = workloadData.days.filter(d => d.overloaded).map(d => d.date);
+}
+
+async function updateKo(id, payload) {
+  if (demoMode) {
+    for (const d of workloadData.days) {
+      const i = d.items.findIndex(x => x.id === id);
+      if (i < 0) continue;
+      const it = d.items[i];
+      if (payload.status === "done") d.items.splice(i, 1);
+      if (payload.effort_h != null) it.effort_h = Number(payload.effort_h);
+      if (payload.scheduled_for) {
+        d.items.splice(i, 1);
+        const target = workloadData.days.find(x => x.date === payload.scheduled_for);
+        if (target) { it.fixed = true; target.items.push(it); }
+      }
+      break;
+    }
+    demoRecalc();
+    renderWorkload();
+    return;
+  }
+  try {
+    const res = await fetch("/api/kos/update", { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify({ id, ...payload }) });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    workloadData = data.workload;
+    try { kos = await api("/api/kos"); } catch {}
+    renderWorkload();
+  } catch (err) { alert("No pude actualizar: " + err.message); }
+}
+
+function taskRow(it, dayIdx) {
+  const next = workloadData.days.slice(dayIdx + 1).find(d => d.capacity_h > 0);
+  const due = it.valid_to ? `vence ${esc(it.valid_to)}` : "sin vencimiento";
+  return `<div class="task-row${it.overdue ? " overdue" : ""}">
+    <div class="t">${it.overdue ? "⚠ " : ""}${esc(it.title)}${it.fixed ? " 📌" : ""}
+      <small>${due} · ${esc(it.area || "sin área")} · esfuerzo ${esc(it.effort_origin || "")}</small></div>
+    <input type="number" step="0.5" min="0.1" value="${it.effort_h}" title="Esfuerzo (h)"
+      onchange="updateKo('${esc(it.id)}', {effort_h: this.value})">
+    ${next ? `<button title="Mover a ${esc(next.weekday)} ${esc(next.date)}" onclick="updateKo('${esc(it.id)}', {scheduled_for: '${esc(next.date)}', fixed: true})">→</button>` : ""}
+    <button title="Cerrar" onclick="updateKo('${esc(it.id)}', {status: 'done'})">✔</button>
+  </div>`;
+}
+
+async function renderWorkload() {
+  panelBody.innerHTML = `<h2>Carga</h2><div class="empty">Calculando capacidad y planificación…</div>`;
+  let w;
+  try { w = await loadWorkload(); } catch (err) {
+    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return;
+  }
+  if (!w.days || !w.days.length) {
+    panelBody.innerHTML = `<h2>Carga</h2><div class="empty">Sin memoria local: la carga se calcula en tu instancia (sb serve).</div>`;
+    return;
+  }
+  const maxH = Math.max(1, ...w.days.map(d => Math.max(d.capacity_h, d.meetings_h + d.planned_h)));
+  const px = h => Math.round(120 * h / maxH);
+  const cols = w.days.map((d, i) => {
+    const over = Math.max(0, d.meetings_h + d.planned_h - d.capacity_h);
+    const tasksH = d.planned_h - over;
+    return `<div class="load-col" title="${esc(d.weekday)} ${esc(d.date)} · ${d.load_pct}%" onclick="loadDay=${i};renderWorkload()">
+      ${over > 0 ? `<div class="seg over" style="height:${px(over)}px"></div>` : ""}
+      ${d.planned_h > 0 ? `<div class="seg tasks" style="height:${px(Math.max(0, tasksH))}px"></div>` : ""}
+      ${d.meetings_h > 0 ? `<div class="seg agenda" style="height:${px(d.meetings_h)}px"></div>` : ""}
+      ${d.capacity_h > 0 && d.meetings_h + d.planned_h < d.capacity_h ? `<div class="track" style="height:${px(d.capacity_h - d.meetings_h - d.planned_h)}px;flex:0 0 auto"></div>` : ""}
+    </div>`;
+  }).join("");
+  const labels = w.days.map((d, i) => `<div class="${i === loadDay ? "sel" : ""}">${esc(d.weekday)}<br>${d.capacity_h ? d.load_pct + "%" : "—"}</div>`).join("");
+  const today = w.days[0];
+  const sel = w.days[Math.min(loadDay, w.days.length - 1)];
+  const t = w.totals || {};
+  panelBody.innerHTML = `<h2>Carga</h2>
+    <div class="sync-line">hoy: ${today.meetings_h} h agenda + ${today.planned_h} h tareas / ${today.capacity_h} h
+      ${today.overloaded ? " · ⚠ sobrecargado" : ""} · semana: ${t.planned_h || 0} h de tareas en ${t.capacity_h || 0} h</div>
+    <div class="load-strip">${cols}</div>
+    <div class="load-labels">${labels}</div>
+    <div class="load-legend"><span><i style="background:var(--chart-agenda)"></i>agenda</span>
+      <span><i style="background:var(--chart-tasks)"></i>tareas planificadas</span>
+      <span><i style="background:var(--decision)"></i>no cabe</span></div>
+    <div class="node-type" style="margin-top:.8rem">${esc(sel.weekday)} ${esc(sel.date)} · ${sel.capacity_h ? `${sel.meetings_h} h agenda · ${sel.planned_h} h tareas · ${sel.free_h} h libres` : "sin jornada"}</div>
+    ${sel.items.length ? sel.items.map(it => taskRow(it, Math.min(loadDay, w.days.length - 1))).join("")
+      : `<div class="empty">Nada planificado este día.</div>`}
+    ${(w.unscheduled || []).length ? `<div class="node-type" style="margin-top:1rem">sin espacio esta semana</div>` +
+      w.unscheduled.map(u => `<div class="task-row"><div class="t">${esc(u.title)}<small>${u.effort_h} h${u.valid_to ? " · vence " + esc(u.valid_to) : ""}</small></div>
+        <button title="Cerrar" onclick="updateKo('${esc(u.id)}', {status: 'done'})">✔</button></div>`).join("") : ""}
+    <div class="sync-line" style="margin-top:.8rem">Esfuerzo: edítalo en la casilla · → mueve al siguiente día hábil (queda fijada) · ✔ cierra. Jornada en <code>.brain/config.json → workday</code>.</div>`;
 }
 
 /* ── conectores (SDK) ─────────────────────────────────────────────────── */

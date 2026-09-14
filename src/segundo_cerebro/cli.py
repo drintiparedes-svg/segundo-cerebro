@@ -377,6 +377,62 @@ def cmd_ai(args) -> int:
     return 0
 
 
+def cmd_carga(args) -> int:
+    """Carga de hoy y proyección de 7 días."""
+    from .areas import load_areas
+    from .config import load_config
+    from .priority import area_scores
+    from .workload import plan_week
+    store = _store(args)
+    areas = load_areas()
+    rank = {r["id"]: r["rank"] for r in area_scores(store, areas, _brain_dir(args))} if areas else {}
+    plan = plan_week(store, load_config(_brain_dir(args)), days=args.days, area_rank=rank)
+    print(f"Jornada {plan['workday']['start']}–{plan['workday']['end']} · foco {int(plan['workday']['focus_ratio']*100)}%\n")
+    for d in plan["days"]:
+        if not d["capacity_h"]:
+            print(f"{d['weekday']} {d['date']}  — sin jornada")
+            continue
+        bar = "█" * int(round(min(d["load_pct"], 150) / 10))
+        flag = " ⚠" if d["overloaded"] else ""
+        print(f"{d['weekday']} {d['date']}  {bar:<15} {d['load_pct']:>3}%  agenda {d['meetings_h']} h · "
+              f"tareas {d['planned_h']} h · libre {d['free_h']} h{flag}")
+        for it in d["items"]:
+            print(f"      {'⚠ ' if it['overdue'] else '  '}{it['effort_h']:>4} h  {it['title'][:60]}"
+                  f"{'  (vence ' + it['valid_to'] + ')' if it['valid_to'] else ''}  [{it['id']}]")
+    t = plan["totals"]
+    print(f"\nTotal: {t['tasks']} tareas · {t['planned_h']} h planificadas de {t['capacity_h']} h; "
+          f"sin espacio: {t['unscheduled']}")
+    for u in plan["unscheduled"][:10]:
+        print(f"   ✗ {u['title'][:60]} ({u['effort_h']} h)  [{u['id']}]")
+    print("\nAjusta: sb task done <id> · sb task effort <id> <horas> · sb task move <id> <fecha>")
+    return 0
+
+
+def cmd_task(args) -> int:
+    store = _store(args)
+    ko = store.get_knowledge_object(args.id)
+    if ko is None:
+        print(f"No existe el compromiso {args.id}", file=sys.stderr)
+        return 1
+    if args.task_command == "done":
+        store.update_ko(ko.id, status="done")
+        print(f"✔ cerrado: {ko.title}")
+    elif args.task_command == "reopen":
+        store.update_ko(ko.id, status="active")
+        print(f"↺ reabierto: {ko.title}")
+    elif args.task_command == "effort":
+        store.update_ko(ko.id, effort_h=max(0.1, float(args.hours)))
+        print(f"esfuerzo de «{ko.title}»: {args.hours} h")
+    elif args.task_command == "move":
+        tags = [t for t in ko.tags if t != "fijado"] + ["fijado"]
+        store.update_ko(ko.id, scheduled_for=args.date, tags=tags)
+        print(f"«{ko.title}» fijada para {args.date}")
+    elif args.task_command == "due":
+        store.update_ko(ko.id, valid_to=args.date)
+        print(f"«{ko.title}» vence {args.date}")
+    return 0
+
+
 def cmd_connect(args) -> int:
     from .connectors import registry
     brain_dir = _brain_dir(args)
@@ -1076,6 +1132,29 @@ def main(argv: list[str] | None = None) -> int:
     mlp.add_argument("--no-llm", action="store_true", default=True,
                      help="(por defecto) extracción local; Claude entra después vía enrich")
     mlp.set_defaults(func=cmd_mail_capture)
+
+    p = sub.add_parser("carga", help="carga de hoy y proyección de 7 días (agenda + tareas vs jornada)")
+    p.add_argument("--days", type=int, default=7)
+    p.set_defaults(func=cmd_carga)
+
+    tk = sub.add_parser("task", help="editar un compromiso: cerrar, esfuerzo, mover, vencimiento")
+    tksub = tk.add_subparsers(dest="task_command", required=True)
+    for name, helptext in (("done", "cerrar"), ("reopen", "reabrir")):
+        tp = tksub.add_parser(name, help=helptext)
+        tp.add_argument("id")
+        tp.set_defaults(func=cmd_task)
+    tp = tksub.add_parser("effort", help="esfuerzo en horas")
+    tp.add_argument("id")
+    tp.add_argument("hours", type=float)
+    tp.set_defaults(func=cmd_task)
+    tp = tksub.add_parser("move", help="fijar a un día (YYYY-MM-DD)")
+    tp.add_argument("id")
+    tp.add_argument("date")
+    tp.set_defaults(func=cmd_task)
+    tp = tksub.add_parser("due", help="cambiar vencimiento (YYYY-MM-DD)")
+    tp.add_argument("id")
+    tp.add_argument("date")
+    tp.set_defaults(func=cmd_task)
 
     cn = sub.add_parser("connect", help="conectores: fuentes que se conectan y desconectan sin tocar código")
     cnsub = cn.add_subparsers(dest="connect_command")

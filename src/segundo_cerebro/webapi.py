@@ -236,6 +236,21 @@ def projects_payload(store, params: dict) -> list:
     return out
 
 
+def workload_payload(store, params: dict) -> dict:
+    """Carga de hoy y proyección de 7 días (capacidad − agenda vs tareas)."""
+    from .areas import load_areas
+    from .config import load_config
+    from .priority import area_scores
+    from .workload import plan_week
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"days": [], "unscheduled": [], "totals": {}}
+    areas = load_areas()
+    rank = {r["id"]: r["rank"] for r in area_scores(store, areas, brain_dir)} if areas else {}
+    days = max(1, min(14, int(params.get("days", 7))))
+    return plan_week(store, load_config(brain_dir), days=days, area_rank=rank)
+
+
 def connectors_payload(store, params: dict) -> dict:
     """Instancias con estado y documentos aportados + tipos disponibles."""
     from .connectors.registry import describe, types_payload
@@ -314,6 +329,7 @@ ROUTES = {
     "/api/status": status_payload,
     "/api/ai": ai_payload,
     "/api/connectors": connectors_payload,
+    "/api/workload": workload_payload,
     "/api/week": week_payload,
     "/api/projects": projects_payload,
     "/api/config": config_payload,
@@ -479,6 +495,38 @@ def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, result
 
 
+def update_ko(store, params: dict, body: bytes) -> tuple[int, object]:
+    """Edición manual de un compromiso: cerrar, esfuerzo, vencimiento, día
+    planificado (con `fixed` el planificador lo respeta)."""
+    data = _json_body(body)
+    if data is None or not data.get("id"):
+        return 400, {"error": "falta id"}
+    ko = store.get_knowledge_object(data["id"])
+    if ko is None:
+        return 404, {"error": "no existe"}
+    fields = {}
+    if data.get("status") in ("active", "done", "dropped"):
+        fields["status"] = data["status"]
+    if "effort_h" in data:
+        try:
+            fields["effort_h"] = max(0.1, float(data["effort_h"]))
+        except (TypeError, ValueError):
+            return 400, {"error": "effort_h inválido"}
+    if "valid_to" in data:
+        fields["valid_to"] = data["valid_to"] or None
+    if "scheduled_for" in data:
+        fields["scheduled_for"] = data["scheduled_for"] or None
+        tags = [t for t in ko.tags if t != "fijado"]
+        if data.get("fixed", True) and data["scheduled_for"]:
+            tags.append("fijado")
+        fields["tags"] = tags
+    try:
+        updated = store.update_ko(ko.id, **fields)
+    except ValueError as exc:
+        return 400, {"error": str(exc)}
+    return 200, {"ko": asdict(updated), "workload": workload_payload(store, {})}
+
+
 def connector_action(action: str):
     """POST /api/connectors/{add,test,sync,remove}: fachada sobre el registro."""
     def handler(store, params: dict, body: bytes) -> tuple[int, object]:
@@ -538,6 +586,7 @@ POST_ROUTES = {
     "/api/areas/override": override_area,
     "/api/ai/off": ai_off,
     "/api/ai/on": ai_on,
+    "/api/kos/update": update_ko,
     "/api/connectors/add": connector_action("add"),
     "/api/connectors/test": connector_action("test"),
     "/api/connectors/sync": connector_action("sync"),

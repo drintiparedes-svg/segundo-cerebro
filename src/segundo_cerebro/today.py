@@ -62,6 +62,12 @@ def build_today(store, brain_dir: str | Path, areas: list[Area],
                                  f"(fuente: {item.source_doc or '—'})")
         lines.append("")
 
+    # ── carga de hoy (agenda + tareas planificadas vs jornada) ───────────
+    from .config import load_config
+    from .workload import plan_week, today_lines
+    plan = plan_week(store, load_config(brain_dir), today, days=7, area_rank=area_rank)
+    lines.extend(today_lines(plan))
+
     # ── proyectos especiales (brain/self/projects.md) ────────────────────
     from .projects import load_projects, project_brief
     projects = load_projects()

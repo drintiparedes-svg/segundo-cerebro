@@ -30,6 +30,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [14 · Escalamiento](docs/14-escalamiento.md) | prioridad de áreas, subida de documentos, Zotero/chats/transcripciones, validación de referencias |
 | [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave, `sb refresh` programado, Claude por área, captura manual de correo, proyectos/tesis y revisión semanal |
 | [16 · Conectores](docs/16-conectores.md) | Connector SDK: conectar, probar, sincronizar y desconectar fuentes con purga de sus datos |
+| [17 · Carga y autonomía](docs/17-carga-y-autonomia.md) | cockpit de carga (hoy + 7 días), esfuerzo inferido y ajustable, matriz de autonomía |
 
 ## Quickstart
 
@@ -59,6 +60,8 @@ sb week                     # revisión semanal
 sb ai off                   # BOTÓN DE EMERGENCIA: apaga toda la IA → modo manual supervisado
 sb connect add localfs --path ~/Documentos/Proyectos   # conectar una fuente (SDK)
 sb connect remove localfs:Proyectos --purge          # desconectar y borrar lo que aportó
+sb carga                    # ¿cabe lo que tengo que hacer? agenda + tareas vs jornada, 7 días
+sb task done <id>           # cerrar un compromiso (effort / move / due para ajustarlo)
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

@@ -102,6 +102,7 @@ HEADER_KEYS = {
     "deliverable": ("entregable", "deliverable"),
     "priority": ("prioridad", "priority"),
     "phase": ("fase", "phase"),
+    "duration": ("duraci", "duration", "esfuerzo", "effort"),
 }
 
 
@@ -161,6 +162,7 @@ def parse_plan_xlsx(path: str | Path, start: str | None = None) -> list[dict]:
                     "responsible": str(get("responsible") or "").strip() or None,
                     "deliverable": str(get("deliverable") or "").strip() or None,
                     "priority": str(get("priority") or "").strip() or None,
+                    "duration": str(get("duration") or "").strip() or None,
                     "sheet": ws.title,
                 })
             key = lambda rs: (sum(1 for r in rs if r["due"] or r["week"]), len(rs))
@@ -198,7 +200,10 @@ def import_plan(store, path: str | Path, project: Project, start: str | None = N
     created = 0
     for row in rows:
         digest = hashlib.sha1(f"{project.id}|{row['activity']}|{row['week']}".encode()).hexdigest()[:12]
-        tags = [t for t in (row["phase"], row["priority"] and f"prioridad:{row['priority'].lower()}") if t]
+        from .workload import parse_duration_hours
+        tags = [t for t in (row["phase"], row["priority"] and f"prioridad:{row['priority'].lower()}",
+                            row.get("duration") and f"duracion:{row['duration']}") if t]
+        effort = parse_duration_hours(row.get("duration"))
         detail = f" — entregable: {row['deliverable']}" if row["deliverable"] else ""
         store.add_knowledge_object(KnowledgeObject(
             id=f"ko-plan-{digest}", ko_type="task", title=row["activity"][:80],
@@ -207,7 +212,7 @@ def import_plan(store, path: str | Path, project: Project, start: str | None = N
             people=[p for p in project.people if row["responsible"] in (None, "", "IP")] or [],
             project=project.name, status=row["status"], confidence="confirmed",
             source_doc=doc.id, tags=tags, valid_from=row["start"],
-            valid_to=row["due"], area=area or project.area,
+            valid_to=row["due"], area=area or project.area, effort_h=effort,
         ))
         created += 1
     dated = sum(1 for r in rows if r["due"])
@@ -307,6 +312,10 @@ def week_review(store, brain_dir: str | Path, projects: list[Project],
     lines.append(f"- Vencen la próxima semana: {len(due)}")
     lines += [f"  - {t.valid_to} · {t.title} [{name_of(t.area)}]" for t in due[:10]]
     lines.append("")
+
+    from .config import load_config
+    from .workload import plan_week, projection_lines
+    lines.extend(projection_lines(plan_week(store, load_config(brain_dir), today, persist=False)))
 
     lines.append("## Hitos próximos (14 días)")
     hits = []

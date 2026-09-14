@@ -19,6 +19,8 @@ DEFAULTS: dict = {
             "max_docs_per_run": 40},
     "advisor": {"recent_days": 90, "max_files_per_folder": 5000,
                 "max_depth": 4},
+    "workday": {"start": "08:30", "end": "18:00", "days": [1, 2, 3, 4, 5],
+                "focus_ratio": 0.6, "meeting_default_min": 60},
 }
 
 

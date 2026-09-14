@@ -110,6 +110,8 @@ class BrainStore:
             "ALTER TABLE documents ADD COLUMN area TEXT",
             "ALTER TABLE knowledge_objects ADD COLUMN area TEXT",
             "ALTER TABLE documents ADD COLUMN connector_id TEXT",
+            "ALTER TABLE knowledge_objects ADD COLUMN effort_h REAL",
+            "ALTER TABLE knowledge_objects ADD COLUMN scheduled_for TEXT",
         ):
             try:
                 self.conn.execute(migration)
@@ -241,6 +243,36 @@ class BrainStore:
         ).fetchall()
         return [self._row_to_document(r) for r in rows]
 
+    KO_EDITABLE = ("status", "effort_h", "valid_to", "scheduled_for", "tags", "statement", "title")
+
+    def get_knowledge_object(self, ko_id: str) -> KnowledgeObject | None:
+        row = self.conn.execute(
+            "SELECT * FROM knowledge_objects WHERE id = ?", (ko_id,)).fetchone()
+        return self._row_to_ko(row) if row else None
+
+    def update_ko(self, ko_id: str, **fields) -> KnowledgeObject | None:
+        """Edición manual (cerrar, esfuerzo, vencimiento, día planificado)."""
+        bad = set(fields) - set(self.KO_EDITABLE)
+        if bad:
+            raise ValueError(f"campos no editables: {', '.join(sorted(bad))}")
+        if not fields:
+            return self.get_knowledge_object(ko_id)
+        cols, vals = [], []
+        for k, v in fields.items():
+            if k == "tags":
+                v = json.dumps(list(v), ensure_ascii=False)
+            cols.append(f"{k} = ?")
+            vals.append(v)
+        vals.append(ko_id)
+        self.conn.execute(f"UPDATE knowledge_objects SET {', '.join(cols)} WHERE id = ?", vals)
+        if "statement" in fields or "title" in fields:
+            ko = self.get_knowledge_object(ko_id)
+            self.conn.execute("DELETE FROM kos_fts WHERE id = ?", (ko_id,))
+            self.conn.execute("INSERT INTO kos_fts (id, title, statement) VALUES (?,?,?)",
+                              (ko_id, ko.title, ko.statement))
+        self.conn.commit()
+        return self.get_knowledge_object(ko_id)
+
     def set_ko_area(self, ko_id: str, area: str | None) -> None:
         self.conn.execute("UPDATE knowledge_objects SET area = ? WHERE id = ?", (area, ko_id))
         self.conn.commit()
@@ -302,12 +334,13 @@ class BrainStore:
         self.conn.execute(
             "INSERT OR REPLACE INTO knowledge_objects (id, ko_type, title, "
             "statement, date, people, project, status, confidence, source_doc, "
-            "tags, valid_from, valid_to, area) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+            "tags, valid_from, valid_to, area, effort_h, scheduled_for) "
+            "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
             (ko.id, ko.ko_type, ko.title, ko.statement, ko.date,
              json.dumps(ko.people, ensure_ascii=False), ko.project, ko.status,
              ko.confidence, ko.source_doc,
              json.dumps(ko.tags, ensure_ascii=False), ko.valid_from, ko.valid_to,
-             ko.area),
+             ko.area, ko.effort_h, ko.scheduled_for),
         )
         self.conn.execute(
             "INSERT INTO kos_fts (id, title, statement) VALUES (?,?,?)",
@@ -456,6 +489,8 @@ class BrainStore:
             source_doc=row["source_doc"], tags=json.loads(row["tags"]),
             valid_from=row["valid_from"], valid_to=row["valid_to"],
             area=row["area"],
+            effort_h=row["effort_h"] if "effort_h" in row.keys() else None,
+            scheduled_for=row["scheduled_for"] if "scheduled_for" in row.keys() else None,
         )
 
     @staticmethod

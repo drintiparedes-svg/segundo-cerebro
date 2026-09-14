@@ -31,6 +31,16 @@ def event_to_document(event: dict, alias: str) -> Document | None:
     date = (start.get("date") or start.get("dateTime") or "")[:10]
     if not date:
         return None
+    end = event.get("end", {})
+    all_day = bool(start.get("date")) and not start.get("dateTime")
+    duration_min = None
+    if start.get("dateTime") and end.get("dateTime"):
+        try:
+            t0 = datetime.fromisoformat(start["dateTime"].replace("Z", "+00:00"))
+            t1 = datetime.fromisoformat(end["dateTime"].replace("Z", "+00:00"))
+            duration_min = max(0, int((t1 - t0).total_seconds() // 60))
+        except ValueError:
+            duration_min = None
 
     attendees = [
         a.get("displayName") or a.get("email", "").split("@")[0]
@@ -65,6 +75,10 @@ def event_to_document(event: dict, alias: str) -> Document | None:
             "people": attendees,
             "event_id": event.get("id"),
             "html_link": event.get("htmlLink"),
+            "start": start.get("dateTime") or start.get("date"),
+            "end": end.get("dateTime") or end.get("date"),
+            "all_day": all_day,
+            "duration_min": duration_min,
         },
     )
 

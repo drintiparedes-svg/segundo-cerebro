@@ -59,6 +59,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
   plan Excel → hitos/atrasos (`sb project`), revisión semanal (`sb week`)
 - ✅ Producto · Fase A: Connector SDK — fuentes enchufables con desconexión
   y purga ([docs/16](16-conectores.md))
+- ✅ Producto · Fase B: cockpit de carga — hoy y proyección de 7 días
+  ([docs/17](17-carga-y-autonomia.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes
