@@ -20,7 +20,7 @@ from pathlib import Path
 
 from .config import load_config
 
-STEPS = ["sources", "google", "mail", "areas", "enrich", "brief"]
+STEPS = ["connectors", "mail", "areas", "enrich", "brief"]
 LOCK_STALE_HOURS = 2
 
 
@@ -62,52 +62,28 @@ def _log(brain_dir: Path, line: str) -> None:
 
 # ── pasos por defecto ─────────────────────────────────────────────────────
 
-def _step_sources(store, brain_dir: Path, cfg: dict) -> dict:
-    from .connectors.localfs import load_registry, sync_source
-    from .extract import HeuristicExtractor
-    from .ingest import new_summary, process_document
-    registry = load_registry(brain_dir)
-    if not registry["sources"]:
-        return {"skipped": "sin carpetas conectadas"}
-    extractor = HeuristicExtractor()
-    summary = new_summary(extractor)
-    per_source = {}
-    for source in registry["sources"]:
-        result = sync_source(store, brain_dir, source)
-        if "error" in result:
-            per_source[source["alias"]] = {"error": result["error"]}
-            continue
-        for doc in result["docs"]:
-            summary["documents"] += 1
-            process_document(store, doc, extractor, summary)
-        per_source[source["alias"]] = {"added": result["added"]}
+def _step_connectors(store, brain_dir: Path, cfg: dict) -> dict:
+    """Todas las instancias habilitadas del registro (carpetas, Drive,
+    Calendar, Zotero, chats…) con extracción heurística."""
+    from .connectors.registry import sync_instances
+    summary = sync_instances(store, brain_dir)
+    if not summary["instances"]:
+        return {"skipped": "sin conectores habilitados (sb connect add …)"}
+    errors = {k: v["error"] for k, v in summary["instances"].items() if v.get("error")}
     return {"documents": summary["documents"], "kos": summary["knowledge_objects"],
-            "sources": per_source}
-
-
-def _step_google(store, brain_dir: Path, cfg: dict) -> dict:
-    from .connectors.google_auth import list_accounts
-    base = brain_dir / "google"
-    accounts = list_accounts(base)
-    if not accounts:
-        return {"skipped": "sin cuentas Google conectadas"}
-    from .connectors.google_sync import sync_all
-    r = cfg["refresh"]
-    summary = sync_all(store, accounts=accounts, days_back=r["days_back"],
-                       days_forward=r["days_forward"], prefer_llm=False, base=base)
-    return {"documents": summary["documents"], "kos": summary["knowledge_objects"],
-            "accounts": summary["accounts"]}
+            "instances": summary["instances"], **({"errors": errors} if errors else {})}
 
 
 def _step_mail(store, brain_dir: Path, cfg: dict) -> dict:
     from .agents import save_latest_triage, save_report
     from .agents.mail_triage import to_markdown, triage
     from .connectors.gmail import fetch_inbox
-    from .connectors.google_auth import list_accounts
+    from .connectors.registry import load_instances
     base = brain_dir / "google"
-    accounts = list_accounts(base)
+    accounts = [i["config"]["account"] for i in load_instances(brain_dir)["instances"]
+                if i["type"] == "gmail" and i.get("enabled", True)]
     if not accounts:
-        return {"skipped": "sin cuentas Google conectadas"}
+        return {"skipped": "sin cuentas Gmail habilitadas"}
     emails, errors = [], {}
     for alias in accounts:
         try:
@@ -147,7 +123,7 @@ def _step_brief(store, brain_dir: Path, cfg: dict) -> dict:
 
 
 DEFAULT_RUNNERS = {
-    "sources": _step_sources, "google": _step_google, "mail": _step_mail,
+    "connectors": _step_connectors, "mail": _step_mail,
     "areas": _step_areas, "enrich": _step_enrich, "brief": _step_brief,
 }
 

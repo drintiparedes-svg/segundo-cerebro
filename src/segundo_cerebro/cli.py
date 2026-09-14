@@ -377,6 +377,76 @@ def cmd_ai(args) -> int:
     return 0
 
 
+def cmd_connect(args) -> int:
+    from .connectors import registry
+    brain_dir = _brain_dir(args)
+    cmd = args.connect_command
+    if cmd == "types":
+        for t in registry.types_payload():
+            print(f"{t['id']:<10} {t['name']:<20} {t['kind']:<6} {t['privacy']:<11} {t['description']}")
+            if t["setup_hint"]:
+                print(f"{'':<10} → {t['setup_hint']}")
+        return 0
+    if cmd == "add":
+        config = {k: v for k, v in (("path", args.path), ("alias", args.alias),
+                                    ("account", args.account)) if v}
+        for raw in args.config or []:
+            k, _, v = raw.partition("=")
+            config[k] = v
+        try:
+            inst = registry.add_instance(brain_dir, args.type, config)
+        except (KeyError, ValueError) as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        print(f"Conectado: {inst['id']}  ({inst['type']})  {inst['config']}")
+        print("Prueba: sb connect test " + inst["id"] + "  ·  Sincroniza: sb connect sync " + inst["id"])
+        return 0
+    if cmd == "test":
+        r = registry.test_instance(brain_dir, args.id)
+        print(f"{'✔' if r['ok'] else '✘'} {args.id}: {r['detail']}")
+        return 0 if r["ok"] else 1
+    if cmd == "sync":
+        summary = registry.sync_instances(_store(args), brain_dir, only=[args.id] if args.id else None)
+        _auto_assign(args, _store(args))
+        for iid, r in summary["instances"].items():
+            mark = "✘" if r.get("error") else "✔"
+            print(f"{mark} {iid}: nuevos {r['added']} · sin cambios {r['unchanged']}"
+                  + (f" · {r['error']}" if r.get("error") else "")
+                  + (f" · {r['detail']}" if r.get("detail") else ""))
+        if not summary["instances"]:
+            print("Sin conectores habilitados. Usa: sb connect add <tipo> …")
+        print(f"Documentos nuevos: {summary['documents']} · KOs: {summary['knowledge_objects']}")
+        return 0
+    if cmd == "remove":
+        try:
+            r = registry.remove_instance(brain_dir, _store(args), args.id,
+                                         purge=args.purge, forget=args.forget)
+        except KeyError as exc:
+            print(exc, file=sys.stderr)
+            return 1
+        if args.purge:
+            print(f"Desconectado {args.id}: borrados {r['documents']} documentos, "
+                  f"{r['kos']} KOs y {r['relationships']} relaciones que aportó.")
+        else:
+            print(f"Desconectado {args.id}. Sus documentos siguen en la memoria "
+                  "(usa --purge para borrarlos).")
+        if r.get("token_forgotten"):
+            print("Autorización Google olvidada (token eliminado).")
+        return 0
+    # list
+    rows = registry.describe(_store(args), brain_dir)
+    if not rows:
+        print("Sin conectores. Tipos disponibles: sb connect types")
+        return 0
+    for r in rows:
+        state = "on " if r["enabled"] else "off"
+        last = (r["last_sync"] or "nunca")[:16]
+        err = f"  ✘ {r['last_result']['error']}" if r.get("last_result") and r["last_result"].get("error") else ""
+        print(f"[{state}] {r['id']:<34} {r['type_name']:<18} {r['privacy']:<11} "
+              f"docs {r['documents']:<5} sync {last}{err}")
+    return 0
+
+
 def cmd_refresh(args) -> int:
     from .refresh import run_refresh
     if args.quiet:
@@ -1006,6 +1076,32 @@ def main(argv: list[str] | None = None) -> int:
     mlp.add_argument("--no-llm", action="store_true", default=True,
                      help="(por defecto) extracción local; Claude entra después vía enrich")
     mlp.set_defaults(func=cmd_mail_capture)
+
+    cn = sub.add_parser("connect", help="conectores: fuentes que se conectan y desconectan sin tocar código")
+    cnsub = cn.add_subparsers(dest="connect_command")
+    cn.set_defaults(func=cmd_connect, connect_command="list")
+    cnp = cnsub.add_parser("list", help="instancias configuradas y su estado")
+    cnp.set_defaults(func=cmd_connect)
+    cnp = cnsub.add_parser("types", help="tipos de conector disponibles")
+    cnp.set_defaults(func=cmd_connect)
+    cnp = cnsub.add_parser("add", help="conecta una fuente: localfs, zotero, chats… (Google: sb google connect)")
+    cnp.add_argument("type")
+    cnp.add_argument("--path")
+    cnp.add_argument("--alias")
+    cnp.add_argument("--account")
+    cnp.add_argument("--config", action="append", help="campo=valor (repetible)")
+    cnp.set_defaults(func=cmd_connect)
+    cnp = cnsub.add_parser("test", help="¿llego a la fuente?")
+    cnp.add_argument("id")
+    cnp.set_defaults(func=cmd_connect)
+    cnp = cnsub.add_parser("sync", help="sincroniza una instancia (o todas)")
+    cnp.add_argument("id", nargs="?")
+    cnp.set_defaults(func=cmd_connect)
+    cnp = cnsub.add_parser("remove", help="desconecta; --purge borra lo que aportó a la memoria")
+    cnp.add_argument("id")
+    cnp.add_argument("--purge", action="store_true")
+    cnp.add_argument("--forget", action="store_true", help="Google: olvidar también la autorización")
+    cnp.set_defaults(func=cmd_connect)
 
     ai = sub.add_parser("ai", help="interruptor de emergencia: apaga toda la IA (modo manual supervisado)")
     aisub = ai.add_subparsers(dest="ai_command")

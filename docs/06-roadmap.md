@@ -57,6 +57,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
   con Claude por área (`sb enrich`, `clinica` nunca)
 - ✅ Modo activo III: captura manual de correo, proyectos especiales con
   plan Excel → hitos/atrasos (`sb project`), revisión semanal (`sb week`)
+- ✅ Producto · Fase A: Connector SDK — fuentes enchufables con desconexión
+  y purga ([docs/16](16-conectores.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - Human approval gate para toda acción externa
 - Acciones: borradores de correo, preparación de reuniones, informes

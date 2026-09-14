@@ -301,6 +301,14 @@
   .verdict.conectar { color: var(--project); border-color: var(--project); }
   .verdict.revisar { color: var(--person); border-color: var(--person); }
   .verdict.ignorar { color: var(--ink-faint); }
+  .priv { font-family: "JetBrains Mono", monospace; font-size: .6rem; letter-spacing: .08em; text-transform: uppercase; padding: .05rem .4rem; border-radius: 999px; border: 1px solid var(--line); color: var(--ink-faint); }
+  .priv.local { color: var(--project); border-color: var(--project); }
+  .priv.read-cloud { color: var(--organization); border-color: var(--organization); }
+  .priv.write-cloud { color: var(--decision); border-color: var(--decision); }
+  .conn-card.off { opacity: .55; }
+  .conn-form { display: grid; grid-template-columns: 1fr; gap: .4rem; margin-top: .5rem; }
+  .conn-form { min-width: 0; }
+  .conn-form select, .conn-form input { width: 100%; min-width: 0; background: var(--surface-2); color: var(--ink); border: 1px solid var(--line); border-radius: .5rem; padding: .45rem .7rem; font: inherit; font-size: .84rem; }
   .sync-line { font-family: "JetBrains Mono", monospace; font-size: .68rem; color: var(--ink-faint); margin: .2rem 0 .8rem; }
   a.src { color: var(--accent); text-decoration: none; border-bottom: 1px dotted var(--accent); }
   a.src:hover { border-bottom-style: solid; }
@@ -353,7 +361,7 @@
     <button data-tab="people">Personas</button>
     <button data-tab="memory">Memoria</button>
     <button data-tab="mail">Correo</button>
-    <button data-tab="sources">Fuentes</button>
+    <button data-tab="sources">Conectores</button>
     <button data-tab="ask">Preguntar</button>
   </nav>
   <div id="panel-body"></div>
@@ -433,6 +441,19 @@ const DEMO = {
   sources: [
     { path: "~/Escritorio/Tesis 2026", alias: "Tesis 2026", last_sync: "2026-09-09T08:00:00Z", available: true },
     { path: "~/Escritorio/FALP", alias: "FALP", last_sync: "2026-09-09T08:00:00Z", available: true },
+  ],
+  connectors: [
+    { id: "localfs:Tesis-2026", type: "localfs", type_name: "Carpeta local", kind: "local", privacy: "local", label: "Tesis 2026", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 14, last_result: { added: 0, unchanged: 14 } },
+    { id: "gdrive:falp", type: "gdrive", type_name: "Google Drive", kind: "cloud", privacy: "read-cloud", label: "falp", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 22, last_result: { added: 2, unchanged: 0 } },
+    { id: "gcalendar:falp", type: "gcalendar", type_name: "Google Calendar", kind: "cloud", privacy: "read-cloud", label: "falp", enabled: true, last_sync: "2026-09-09T08:00:00Z", documents: 31, last_result: { added: 1, unchanged: 0 } },
+    { id: "gmail:falp", type: "gmail", type_name: "Gmail (triaje)", kind: "cloud", privacy: "read-cloud", label: "falp", enabled: true, last_sync: null, documents: 0, last_result: null },
+    { id: "zotero:biblioteca", type: "zotero", type_name: "Zotero / BibTeX", kind: "local", privacy: "local", label: "biblioteca.bib", enabled: true, last_sync: "2026-09-08T20:00:00Z", documents: 48, last_result: { added: 0, unchanged: 1 } },
+  ],
+  connectorTypes: [
+    { id: "localfs", name: "Carpeta local", privacy: "local", description: "Carpeta de tu equipo, solo lectura.", config_schema: { path: { required: true, help: "ruta de la carpeta" } } },
+    { id: "zotero", name: "Zotero / BibTeX", privacy: "local", description: "Export .bib o CSL-JSON.", config_schema: { path: { required: true, help: "export .bib o .json" } } },
+    { id: "chats", name: "WhatsApp / Slack", privacy: "local", description: "Export .txt o .zip.", config_schema: { path: { required: true, help: "export" }, alias: { help: "nombre" } } },
+    { id: "gdrive", name: "Google Drive", privacy: "read-cloud", description: "Solo lectura.", config_schema: { account: { required: true } }, setup_hint: "sb google connect <alias>" },
   ],
   suggestions: [
     { path: "~/Documentos/Medismart", name: "Medismart", verdict: "conectar", score: 58, files: 23, recent: 9, area_guess: "medismart", reasons: ["23 archivos soportados", "9 modificados en los últimos 90 días", "calza con el área «medismart»"] },
@@ -539,6 +560,7 @@ let areasData = [];
 let peopleData = null;      // {people, suggested, unknown_senders}
 let sourcesData = null;     // {sources, ignored}
 let suggestionsData = null; // [{path, name, verdict, …}]
+let connectorsData = null;  // {instances, types}
 let memFilter = "decisions";
 let todayView = "today";     // today | week
 let selected = null;
@@ -909,7 +931,7 @@ function renderAreas() {
   if (!areasData.length) {
     panelBody.innerHTML = `<h2>Áreas de trabajo</h2>
       <div class="empty">Tu memoria está vacía o sin áreas asignadas. Sube un
-      documento en la pestaña <b>Fuentes</b>, o corre <code>sb ingest brain/</code>
+      documento en la pestaña <b>Conectores</b>, o corre <code>sb ingest brain/</code>
       y <code>sb areas assign</code> (clasificación 100% local).</div>`;
     return;
   }
@@ -1100,7 +1122,7 @@ function renderMemory() {
       `<button class="${f === memFilter ? "active" : ""}" onclick="memFilter='${f}';renderMemory()">${
         { decisions: "Decisiones", tasks: "Compromisos", timeline: "Timeline" }[f]}</button>`).join("")}</div>` +
     (items.length ? items.map(koCard).join("") :
-      `<div class="empty">Aún no hay registros. Sube un documento en <b>Fuentes</b> o corre <code>sb ingest brain/</code>.</div>`);
+      `<div class="empty">Aún no hay registros. Sube un documento en <b>Conectores</b> o corre <code>sb ingest brain/</code>.</div>`);
 }
 
 /* ── hoy: brief del día ───────────────────────────────────────────────── */
@@ -1303,7 +1325,7 @@ async function applySource(path, accept) {
     const i = suggestionsData.findIndex(s => s.path === path);
     if (i >= 0) {
       const s = suggestionsData.splice(i, 1)[0];
-      if (accept) sourcesData.sources.push({ path: s.path, alias: s.name, last_sync: null, available: true });
+      if (accept && connectorsData) connectorsData.instances.push({ id: "localfs:" + s.name, type: "localfs", type_name: "Carpeta local", privacy: "local", label: s.name, enabled: true, last_sync: null, documents: 0, last_result: null });
     }
     renderSources(true);
     return;
@@ -1317,8 +1339,117 @@ async function applySource(path, accept) {
     if (data.error) { alert(data.error); return; }
     sourcesData = { sources: data.sources, ignored: data.ignored };
     suggestionsData = (suggestionsData || []).filter(s => s.path !== path);
+    connectorsData = null;
     renderSources(true);
   } catch { /* servidor no disponible */ }
+}
+
+/* ── conectores (SDK) ─────────────────────────────────────────────────── */
+async function loadConnectors() {
+  if (demoMode) {
+    if (!connectorsData) connectorsData = { instances: DEMO.connectors.map(c => ({ ...c })), types: DEMO.connectorTypes };
+    return connectorsData;
+  }
+  connectorsData = await api("/api/connectors");
+  return connectorsData;
+}
+
+async function connectorAction(action, payload) {
+  const box = document.getElementById("conn-msg");
+  if (demoMode) {
+    const list = connectorsData.instances;
+    if (action === "remove") {
+      const i = list.findIndex(c => c.id === payload.id);
+      if (i >= 0) {
+        if (list[i].type.startsWith("g")) { list[i].enabled = false; if (payload.purge) list[i].documents = 0; }
+        else list.splice(i, 1);
+      }
+    } else if (action === "add") {
+      const t = connectorsData.types.find(x => x.id === payload.type);
+      const label = (payload.config.alias || payload.config.path || payload.config.account || "nuevo").split(/[\\/]/).pop();
+      list.push({ id: `${payload.type}:${label}`, type: payload.type, type_name: t ? t.name : payload.type, privacy: t ? t.privacy : "local", label, enabled: true, last_sync: null, documents: 0, last_result: null });
+    } else if (action === "sync") {
+      const c = list.find(x => x.id === payload.id); if (c) { c.last_sync = new Date().toISOString(); c.last_result = { added: 3, unchanged: c.documents }; c.documents += 3; }
+    } else if (action === "test") {
+      if (box) box.textContent = `Simulación (demo): ✔ ${payload.id} accesible.`;
+      return;
+    }
+    renderConnectors(true);
+    return;
+  }
+  if (box) box.textContent = action === "sync" ? "Sincronizando…" : action === "test" ? "Probando…" : "…";
+  try {
+    const res = await fetch(`/api/connectors/${action}`, { method: "POST",
+      headers: { "Content-Type": "application/json" }, body: JSON.stringify(payload) });
+    const data = await res.json();
+    if (data.error) { if (box) box.textContent = "Error: " + data.error; return; }
+    connectorsData = { instances: data.instances, types: data.types };
+    let msg = "";
+    if (action === "test") msg = `${data.ok ? "✔" : "✘"} ${esc(data.detail || "")}`;
+    if (action === "sync") { const s = data.summary || {}; msg = `Sincronizado: ${s.documents || 0} documentos nuevos · ${s.knowledge_objects || 0} KOs`; }
+    if (action === "remove") msg = data.purged ? `Desconectado: borrados ${data.documents} documentos, ${data.kos} KOs.` : "Desconectado; sus documentos siguen en la memoria.";
+    if (action === "add") msg = `Conectado: ${esc(data.instance.id)}`;
+    await renderConnectors(true);
+    const b2 = document.getElementById("conn-msg"); if (b2) b2.textContent = msg;
+    if (action === "sync" || action === "remove") {
+      try { graph = await api("/api/graph"); initSim(); kos = await api("/api/kos"); areasData = await api("/api/areas"); } catch {}
+    }
+  } catch (err) { if (box) box.textContent = "Error: " + err.message; }
+}
+
+function removeConnector(id) {
+  const purge = confirm(`Desconectar ${id}.\n\n¿Borrar también de la memoria todo lo que aportó (documentos, decisiones, compromisos derivados)?\n\nAceptar = desconectar y borrar sus datos · Cancelar = solo desconectar (los datos quedan)`);
+  connectorAction("remove", { id, purge });
+}
+
+function connectorCard(c) {
+  const last = c.last_sync ? `sync ${esc(c.last_sync.slice(0, 16).replace("T", " "))}` : "sin sincronizar";
+  const err = c.last_result && c.last_result.error ? `<div class="who" style="color:var(--decision)">✘ ${esc(c.last_result.error)}</div>` : "";
+  const isGoogle = c.type === "gdrive" || c.type === "gcalendar" || c.type === "gmail";
+  return `<div class="area-card conn-card${c.enabled ? "" : " off"}">
+    <div class="area-head">
+      <span class="priv ${esc(c.privacy)}">${esc(c.privacy)}</span>
+      <h3>${esc(c.label)} <span class="who">· ${esc(c.type_name)}</span></h3>
+      <div class="area-actions">
+        <button title="Probar" onclick="connectorAction('test', {id: '${esc(c.id)}'})">Probar</button>
+        ${c.enabled && c.type !== "gmail" ? `<button title="Sincronizar ahora" onclick="connectorAction('sync', {id: '${esc(c.id)}'})">Sync</button>` : ""}
+        ${c.enabled ? `<button title="Desconectar" onclick="removeConnector('${esc(c.id)}')">✕</button>` : `<button title="Reconectar" onclick="connectorAction('add', {type: '${esc(c.type)}', config: ${esc(JSON.stringify(c.config || {}))}})">↺</button>`}
+      </div>
+    </div>
+    <div class="area-stats"><span><b>${c.documents}</b> docs</span><span>${last}</span>
+      <span>${c.enabled ? "" : "desconectado"}${isGoogle && !c.enabled ? " · autorización conservada" : ""}</span></div>
+    ${err}
+  </div>`;
+}
+
+function renderConnectorForm() {
+  const types = (connectorsData && connectorsData.types || []).filter(t => t.config_schema && t.config_schema.path);
+  return `<div class="conn-form" id="conn-form">
+    <select id="conn-type">${types.map(t => `<option value="${esc(t.id)}">${esc(t.name)} — ${esc(t.description || "")}</option>`).join("")}</select>
+    <input id="conn-path" placeholder="ruta de la carpeta o archivo en tu equipo">
+    <input id="conn-alias" placeholder="nombre corto (opcional)">
+    <button class="doc-back" style="margin:0;justify-self:start" onclick="addConnector()">Conectar (solo lectura)</button>
+    <div class="who">Google Drive / Calendar / Gmail se conectan una vez con <code>sb google connect &lt;alias&gt;</code> y aparecen aquí solos.</div>
+  </div>`;
+}
+
+function addConnector() {
+  const type = document.getElementById("conn-type").value;
+  const path = document.getElementById("conn-path").value.trim();
+  const alias = document.getElementById("conn-alias").value.trim();
+  if (!path) { alert("Indica la ruta."); return; }
+  const config = { path }; if (alias) config.alias = alias;
+  connectorAction("add", { type, config });
+}
+
+async function renderConnectors(keepMsg) {
+  const box = document.getElementById("connectors");
+  if (!box) return;
+  let data;
+  try { data = await loadConnectors(); } catch (err) { box.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return; }
+  const list = data.instances.length ? data.instances.map(connectorCard).join("")
+    : `<div class="empty">Sin conectores. Conecta una carpeta abajo o usa el asesor.</div>`;
+  box.innerHTML = list + `<div id="conn-msg" class="who" style="margin:.3rem 0"></div>` + renderConnectorForm();
 }
 
 function renderSuggestions() {
@@ -1348,33 +1479,25 @@ function renderSuggestions() {
 }
 
 async function renderSources(keepSuggestions) {
-  panelBody.innerHTML = `<h2>Fuentes</h2><div class="empty">Cargando…</div>`;
-  let data;
-  try { data = await loadSources(); } catch (err) {
-    panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`; return;
-  }
-  const list = data.sources.length ? data.sources.map(s => `
-    <div class="rel-line"><span class="rt">${s.available === false ? "no disponible" : "carpeta"}</span>
-      <span>${esc(s.alias)}</span>
-      <span class="window">${s.last_sync ? "sync " + esc(s.last_sync.slice(0, 10)) : "sin sincronizar"}</span></div>`).join("")
-    : `<div class="empty">Sin carpetas conectadas. Usa el asesor de abajo o <code>sb desktop</code>.</div>`;
-  panelBody.innerHTML = `<h2>Fuentes</h2>
+  panelBody.innerHTML = `<h2>Conectores</h2><div class="empty">Cargando…</div>`;
+  panelBody.innerHTML = `<h2>Conectores</h2>
     <div class="node-type">subir un documento</div>
     <div id="dropzone" class="dropzone" style="margin:.4rem 0 .5rem">Arrastra un archivo aquí<br>
       <small>o haz clic para elegir — pdf, docx, xlsx, pptx, md, txt, csv, vtt</small></div>
     <input id="file-input" type="file" hidden>
     <div id="upload-result" class="empty" style="padding:.2rem 0 .9rem">Se guarda y procesa solo en tu máquina
       (<code>.brain/uploads/</code>); se clasifica por área automáticamente.</div>
-    <div class="node-type">carpetas conectadas (solo lectura)</div>
-    ${list}
-    <div class="node-type" style="margin-top:1rem">asesor: qué conectar</div>
+    <div class="node-type">conectores</div>
+    <div id="connectors" style="margin-top:.4rem"></div>
+    <div class="node-type" style="margin-top:1rem">asesor: qué carpetas conectar</div>
     <div id="suggestions" style="margin-top:.4rem"></div>
     <div class="node-type" style="margin-top:1rem">extracción con claude por área</div>
     <div id="llm-config" style="margin-top:.4rem"></div>
     <div class="sync-line" style="margin-top:.8rem">Todo se actualiza solo con <code>sb refresh</code>
       (programable: <code>sb schedule install --every 4h</code>).</div>`;
   bindDropzone();
-  if (!keepSuggestions) suggestionsData = null;
+  if (!keepSuggestions) { suggestionsData = null; connectorsData = null; }
+  renderConnectors();
   renderSuggestions();
   renderLlmConfig();
 }

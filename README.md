@@ -29,6 +29,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [13 · Writing agent](docs/13-writing-agent.md) | `sb draft`: borradores de informes y documentos desde tu memoria |
 | [14 · Escalamiento](docs/14-escalamiento.md) | prioridad de áreas, subida de documentos, Zotero/chats/transcripciones, validación de referencias |
 | [15 · Modo activo](docs/15-modo-activo.md) | asesor de carpetas y cuentas, personas clave, `sb refresh` programado, Claude por área, captura manual de correo, proyectos/tesis y revisión semanal |
+| [16 · Conectores](docs/16-conectores.md) | Connector SDK: conectar, probar, sincronizar y desconectar fuentes con purga de sus datos |
 
 ## Quickstart
 
@@ -56,6 +57,8 @@ sb project import-plan Plan.xlsx --project tesis --start 2026-04-06   # plan Exc
 sb project                  # hitos, atrasadas, vencen esta semana
 sb week                     # revisión semanal
 sb ai off                   # BOTÓN DE EMERGENCIA: apaga toda la IA → modo manual supervisado
+sb connect add localfs --path ~/Documentos/Proyectos   # conectar una fuente (SDK)
+sb connect remove localfs:Proyectos --purge          # desconectar y borrar lo que aportó
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

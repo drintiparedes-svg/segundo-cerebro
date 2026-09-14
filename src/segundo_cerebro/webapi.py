@@ -236,6 +236,15 @@ def projects_payload(store, params: dict) -> list:
     return out
 
 
+def connectors_payload(store, params: dict) -> dict:
+    """Instancias con estado y documentos aportados + tipos disponibles."""
+    from .connectors.registry import describe, types_payload
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"instances": [], "types": types_payload()}
+    return {"instances": describe(store, brain_dir), "types": types_payload()}
+
+
 def ai_payload(store, params: dict) -> dict:
     from .ai import status
     brain_dir = _brain_dir(store)
@@ -304,6 +313,7 @@ ROUTES = {
     "/api/today": today_payload,
     "/api/status": status_payload,
     "/api/ai": ai_payload,
+    "/api/connectors": connectors_payload,
     "/api/week": week_payload,
     "/api/projects": projects_payload,
     "/api/config": config_payload,
@@ -469,6 +479,43 @@ def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, result
 
 
+def connector_action(action: str):
+    """POST /api/connectors/{add,test,sync,remove}: fachada sobre el registro."""
+    def handler(store, params: dict, body: bytes) -> tuple[int, object]:
+        from .connectors import registry
+        brain_dir = _brain_dir(store)
+        if brain_dir is None:
+            return 400, {"error": "sin memoria local (modo demo)"}
+        data = _json_body(body) or {}
+        try:
+            if action == "add":
+                inst = registry.add_instance(brain_dir, data.get("type", ""),
+                                             dict(data.get("config") or {}))
+                result = {"instance": inst}
+            elif action == "test":
+                result = registry.test_instance(brain_dir, data.get("id", ""))
+            elif action == "sync":
+                from .areas import assign_all, load_areas
+                summary = registry.sync_instances(
+                    store, brain_dir, only=[data["id"]] if data.get("id") else None)
+                areas = load_areas()
+                if areas and summary["documents"]:
+                    assign_all(store, areas)
+                result = {"summary": {k: v for k, v in summary.items() if k != "extractor"}}
+            elif action == "remove":
+                result = registry.remove_instance(brain_dir, store, data.get("id", ""),
+                                                  purge=bool(data.get("purge")),
+                                                  forget=bool(data.get("forget")))
+            else:
+                return 404, {"error": "acción desconocida"}
+        except (KeyError, ValueError) as exc:
+            return 400, {"error": str(exc)}
+        except NotADirectoryError as exc:
+            return 404, {"error": str(exc)}
+        return 200, {**result, **connectors_payload(store, {})}
+    return handler
+
+
 def ai_off(store, params: dict, body: bytes) -> tuple[int, object]:
     """Botón de emergencia: apaga Claude y toda automatización."""
     from .ai import switch_off
@@ -491,6 +538,10 @@ POST_ROUTES = {
     "/api/areas/override": override_area,
     "/api/ai/off": ai_off,
     "/api/ai/on": ai_on,
+    "/api/connectors/add": connector_action("add"),
+    "/api/connectors/test": connector_action("test"),
+    "/api/connectors/sync": connector_action("sync"),
+    "/api/connectors/remove": connector_action("remove"),
     "/api/mail/capture": capture_mail,
     "/api/refresh": start_refresh,
     "/api/config/llm": set_llm_config,

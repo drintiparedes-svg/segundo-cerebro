@@ -11,7 +11,6 @@ Tipos soportados: .md, .txt, .csv, .html, .json siempre; .pdf, .docx,
 
 from __future__ import annotations
 
-import json
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -26,24 +25,46 @@ MAX_FILE_BYTES = 15_000_000
 MAX_BODY_CHARS = 200_000
 
 
-# ── registro de fuentes (.brain/sources.json) ─────────────────────────────
-
-def _registry_path(brain_dir: str | Path) -> Path:
-    p = Path(brain_dir)
-    p.mkdir(parents=True, exist_ok=True)
-    return p / "sources.json"
-
+# ── registro de carpetas: vista compatible sobre .brain/connectors.json ──
+# Las carpetas son instancias del conector `localfs`. Estas funciones
+# conservan la forma antigua {"sources", "state", "ignored"} para el
+# asesor, `sb sources` y `sb desktop`.
 
 def load_registry(brain_dir: str | Path) -> dict:
-    path = _registry_path(brain_dir)
-    if path.exists():
-        return json.loads(path.read_text(encoding="utf-8"))
-    return {"sources": [], "state": {}}
+    from .base import load_registry_file
+    data = load_registry_file(brain_dir)
+    folders = [i for i in data["instances"] if i["type"] == "localfs"]
+    return {
+        "sources": [{"path": i["config"]["path"], "alias": i["config"].get("alias")
+                     or Path(i["config"]["path"]).name, "added_at": i.get("added_at"),
+                     "enabled": i.get("enabled", True)} for i in folders],
+        "state": {i["config"]["path"]: i.get("state", {}) for i in folders},
+        "ignored": data.get("localfs_ignored", []),
+        "suggested_at": data.get("suggested_at"),
+    }
 
 
 def save_registry(brain_dir: str | Path, registry: dict) -> None:
-    _registry_path(brain_dir).write_text(
-        json.dumps(registry, ensure_ascii=False, indent=2), encoding="utf-8")
+    from .base import load_registry_file, new_instance, save_registry_file, unique_id
+    data = load_registry_file(brain_dir)
+    others = [i for i in data["instances"] if i["type"] != "localfs"]
+    existing = {i["config"]["path"]: i for i in data["instances"] if i["type"] == "localfs"}
+    kept = []
+    for s in registry.get("sources", []):
+        inst = existing.get(s["path"])
+        if inst is None:
+            config = {"path": s["path"], "alias": s.get("alias") or Path(s["path"]).name}
+            inst = new_instance("localfs", config["alias"], config, added_at=s.get("added_at"))
+            inst["id"] = unique_id({"instances": others + kept}, inst["id"], config)
+        inst["config"]["alias"] = s.get("alias") or inst["config"].get("alias")
+        inst["state"] = registry.get("state", {}).get(s["path"], inst.get("state", {}))
+        if inst["state"].get("last_sync"):
+            inst["last_sync"] = inst["state"]["last_sync"]
+        kept.append(inst)
+    data["instances"] = others + kept
+    data["localfs_ignored"] = registry.get("ignored", [])
+    data["suggested_at"] = registry.get("suggested_at")
+    save_registry_file(brain_dir, data)
 
 
 def add_source(brain_dir: str | Path, folder: str | Path,
@@ -214,17 +235,20 @@ def iter_files(root: Path):
         yield path
 
 
-def sync_source(store, brain_dir: str | Path, source: dict) -> dict:
+def sync_source(store, brain_dir: str | Path, source: dict, state: dict | None = None) -> dict:
     """Sincroniza una fuente. Incremental por mtime + deduplicación por
-    hash de contenido: correrlo mil veces no duplica nada."""
+    hash de contenido: correrlo mil veces no duplica nada. Con `state`
+    (instancia del SDK) no toca el registro; sin él, lo lee y guarda."""
     root = Path(source["path"])
     result = {"added": 0, "unchanged": 0, "unsupported": 0, "docs": []}
     if not root.is_dir():
         result["error"] = f"carpeta no disponible: {root}"
         return result
 
-    registry = load_registry(brain_dir)
-    state = registry["state"].setdefault(source["path"], {})
+    registry = None
+    if state is None:
+        registry = load_registry(brain_dir)
+        state = registry["state"].setdefault(source["path"], {})
     last_mtime = state.get("last_mtime", 0.0)
     max_mtime = last_mtime
 
@@ -247,5 +271,6 @@ def sync_source(store, brain_dir: str | Path, source: dict) -> dict:
 
     state["last_mtime"] = max_mtime
     state["last_sync"] = now_iso()
-    save_registry(brain_dir, registry)
+    if registry is not None:
+        save_registry(brain_dir, registry)
     return result

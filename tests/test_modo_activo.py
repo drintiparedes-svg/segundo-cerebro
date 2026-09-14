@@ -267,16 +267,16 @@ def test_refresh_runs_steps_in_order_tolerates_errors_and_locks(store, tmp_path)
         return run
 
     def boom(store, brain_dir, cfg):
-        order.append("google")
+        order.append("mail")
         raise RuntimeError("sin red")
 
-    runners = {"sources": ok("sources"), "google": boom, "mail": ok("mail"),
-               "areas": ok("areas"), "enrich": ok("enrich"), "brief": ok("brief")}
-    state = run_refresh(store, tmp_path, runners=runners, skip=["mail"])
-    assert order == ["sources", "google", "areas", "enrich", "brief"]
-    assert state["ok"] is False and state["steps"]["google"]["error"].startswith("RuntimeError")
-    assert state["steps"]["mail"]["skipped"] == "omitido"
-    assert state["steps"]["sources"]["n"] == 1 and state["duration_s"] >= 0
+    runners = {"connectors": ok("connectors"), "mail": boom, "areas": ok("areas"),
+               "enrich": ok("enrich"), "brief": ok("brief")}
+    state = run_refresh(store, tmp_path, runners=runners, skip=["enrich"])
+    assert order == ["connectors", "mail", "areas", "brief"]
+    assert state["ok"] is False and state["steps"]["mail"]["error"].startswith("RuntimeError")
+    assert state["steps"]["enrich"]["skipped"] == "omitido"
+    assert state["steps"]["connectors"]["n"] == 1 and state["duration_s"] >= 0
     assert last_refresh(tmp_path)["started"] == state["started"]
     assert not is_locked(tmp_path) and list((tmp_path / "logs").glob("refresh-*.log"))
 
@@ -293,7 +293,7 @@ def test_refresh_default_runners_without_connectors(store, tmp_path, monkeypatch
     monkeypatch.delenv("ANTHROPIC_API_KEY", raising=False)
     state = run_refresh(store, tmp_path)
     assert state["ok"] is True
-    assert state["steps"]["sources"]["skipped"] and state["steps"]["google"]["skipped"]
+    assert state["steps"]["connectors"]["skipped"] and state["steps"]["mail"]["skipped"]
     assert state["steps"]["areas"]["documents"] == 1
     assert "sin" in state["steps"]["enrich"]["skipped"]
     assert Path(state["steps"]["brief"]["path"]).exists()

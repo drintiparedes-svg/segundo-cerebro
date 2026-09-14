@@ -109,11 +109,26 @@ class BrainStore:
         for migration in (
             "ALTER TABLE documents ADD COLUMN area TEXT",
             "ALTER TABLE knowledge_objects ADD COLUMN area TEXT",
+            "ALTER TABLE documents ADD COLUMN connector_id TEXT",
         ):
             try:
                 self.conn.execute(migration)
             except sqlite3.OperationalError:
                 pass  # la columna ya existe
+        self._backfill_connector_ids()
+
+    def _backfill_connector_ids(self) -> None:
+        """Documentos anteriores al SDK: deduce la instancia desde metadatos."""
+        from .connectors.base import connector_id_for
+        rows = self.conn.execute(
+            "SELECT * FROM documents WHERE connector_id IS NULL").fetchall()
+        for row in rows:
+            cid = connector_id_for(self._row_to_document(row))
+            if cid:
+                self.conn.execute("UPDATE documents SET connector_id = ? WHERE id = ?",
+                                  (cid, row["id"]))
+        if rows:
+            self.conn.commit()
 
     def close(self) -> None:
         self.conn.close()
@@ -122,14 +137,18 @@ class BrainStore:
 
     def add_document(self, doc: Document) -> bool:
         """Inserta un documento; devuelve False si ya estaba (mismo hash)."""
+        from .connectors.base import connector_id_for
         body_hash = Document.content_hash(doc.body)
+        if not doc.connector_id:
+            doc.connector_id = connector_id_for(doc)
         try:
             self.conn.execute(
                 "INSERT INTO documents (id, path, title, doc_type, date, body, "
-                "body_hash, metadata, ingested_at, area) VALUES (?,?,?,?,?,?,?,?,?,?)",
+                "body_hash, metadata, ingested_at, area, connector_id) "
+                "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
                 (doc.id, doc.path, doc.title, doc.doc_type, doc.date, doc.body,
                  body_hash, json.dumps(doc.metadata, ensure_ascii=False),
-                 doc.ingested_at, doc.area),
+                 doc.ingested_at, doc.area, doc.connector_id),
             )
         except sqlite3.IntegrityError:
             return False
@@ -155,6 +174,34 @@ class BrainStore:
     def set_document_area(self, doc_id: str, area: str | None) -> None:
         self.conn.execute("UPDATE documents SET area = ? WHERE id = ?", (area, doc_id))
         self.conn.commit()
+
+    def set_connector(self, doc_id: str, connector_id: str) -> None:
+        self.conn.execute("UPDATE documents SET connector_id = ? WHERE id = ?",
+                          (connector_id, doc_id))
+        self.conn.commit()
+
+    def count_by_connector(self) -> dict[str, int]:
+        rows = self.conn.execute(
+            "SELECT connector_id, COUNT(*) AS n FROM documents "
+            "WHERE connector_id IS NOT NULL GROUP BY connector_id").fetchall()
+        return {r["connector_id"]: r["n"] for r in rows}
+
+    def delete_by_connector(self, connector_id: str) -> dict:
+        """Purga todo lo que aportó una instancia: documentos, sus KOs y
+        relaciones. Las entidades se conservan (pueden venir de otros docs)."""
+        ids = [r["id"] for r in self.conn.execute(
+            "SELECT id FROM documents WHERE connector_id = ?", (connector_id,))]
+        removed = {"documents": 0, "kos": 0, "relationships": 0}
+        for doc_id in ids:
+            gone = self.delete_derived(doc_id)
+            removed["kos"] += gone["kos"]
+            removed["relationships"] += gone["relationships"]
+            self.conn.execute("DELETE FROM collection_docs WHERE doc_id = ?", (doc_id,))
+            self.conn.execute("DELETE FROM documents_fts WHERE id = ?", (doc_id,))
+            self.conn.execute("DELETE FROM documents WHERE id = ?", (doc_id,))
+            removed["documents"] += 1
+        self.conn.commit()
+        return removed
 
     def mark_extractor(self, doc_id: str, extractor: str) -> None:
         """Registra en metadata qué extractor produjo los KOs del documento."""
@@ -396,6 +443,7 @@ class BrainStore:
             doc_type=row["doc_type"], date=row["date"], body=row["body"],
             metadata=json.loads(row["metadata"]), ingested_at=row["ingested_at"],
             area=row["area"],
+            connector_id=row["connector_id"] if "connector_id" in row.keys() else None,
         )
 
     @staticmethod

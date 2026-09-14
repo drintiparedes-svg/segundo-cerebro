@@ -49,6 +49,7 @@ class Document:
     metadata: dict = field(default_factory=dict)
     ingested_at: str = field(default_factory=now_iso)
     area: str | None = None
+    connector_id: str | None = None   # instancia de conector que lo trajo
 
     @staticmethod
     def content_hash(body: str) -> str:
