@@ -416,6 +416,13 @@
 <script>
 "use strict";
 
+/* ── token de sesión (app de escritorio): solo esta ventana habla con la API ── */
+const SB_TOKEN = (document.querySelector('meta[name="sb-token"]') || {}).content || "";
+if (SB_TOKEN) {
+  const _fetch = window.fetch.bind(window);
+  window.fetch = (url, opts = {}) => _fetch(url, { ...opts, headers: { ...(opts.headers || {}), "X-SB-Token": SB_TOKEN } });
+}
+
 /* ── datos de demostración (cuando la API no está disponible) ─────────── */
 const DEMO = {
   graph: {
@@ -1266,7 +1273,8 @@ function syncLine(st) {
   const counts = st.counts && st.counts.documents != null
     ? ` · ${st.counts.documents} docs · ${st.counts.kos} KOs` : "";
   const manual = (aiState && aiState.enabled === false) ? " · manual: solo a pedido" : "";
-  return `<div class="sync-line" id="sync-line">${esc(when)}${esc(bad)}${esc(counts)}${esc(manual)}
+  const ver = st.version ? ` · v${st.version}` : "";
+  return `<div class="sync-line" id="sync-line">${esc(when)}${esc(bad)}${esc(counts)}${esc(manual)}${esc(ver)}
     <button class="doc-back" style="margin:0 0 0 .6rem;padding:.1rem .5rem;font-size:.7rem"
       ${st.running ? "disabled" : ""} onclick="refreshNow()">${st.running ? "…" : "Actualizar ahora"}</button></div>`;
 }
@@ -1298,6 +1306,41 @@ async function refreshNow() {
     } catch { clearInterval(refreshPoll); }
   }, 2000);
   renderToday();
+}
+
+let setupData = null;
+async function loadSetup() {
+  if (demoMode) { setupData = { steps: [], done: 6, total: 6, complete: true }; return setupData; }
+  try { setupData = await api("/api/setup"); } catch { setupData = { steps: [], complete: true }; }
+  return setupData;
+}
+
+function goTab(name) {
+  const btn = document.querySelector(`nav button[data-tab=${name}]`);
+  if (btn) btn.click();
+}
+
+async function installSchedule() {
+  if (!confirm("Programar la sincronización cada 4 h en tu sistema (tarea de usuario, sin nube ni permisos de administrador). ¿Instalar?")) return;
+  try {
+    const res = await fetch("/api/schedule/install", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ every: "4h" }) });
+    const data = await res.json();
+    if (data.error) { alert(data.error); return; }
+    setupData = null; renderToday();
+  } catch (err) { alert("No pude instalar la tarea: " + err.message); }
+}
+
+function setupCard(st) {
+  if (!st || st.complete || !st.steps.length) return "";
+  return `<div class="area-card" style="margin-bottom:.8rem">
+    <div class="area-head"><h3>Primeros pasos <span class="who">· ${st.done}/${st.total}</span></h3></div>
+    ${st.steps.map(s => `<div class="rel-line"><span class="rt">${s.done ? "✔" : "·"}</span>
+      <span style="${s.done ? "color:var(--ink-faint);text-decoration:line-through" : ""}">${esc(s.title)}</span>
+      <span class="window">${s.done ? "" : s.id === "schedule"
+        ? `<button class="doc-back" style="margin:0;padding:.05rem .45rem;font-size:.66rem" onclick="installSchedule()">Programar</button>`
+        : s.tab ? `<button class="doc-back" style="margin:0;padding:.05rem .45rem;font-size:.66rem" onclick="goTab('${esc(s.tab)}')">Ir</button>` : ""}</span></div>
+      ${s.done ? "" : `<div class="who" style="margin:-.2rem 0 .2rem 1.6rem">${esc(s.hint)}</div>`}`).join("")}
+  </div>`;
 }
 
 function todayNav() {
@@ -1362,8 +1405,9 @@ async function renderToday() {
   panelBody.innerHTML = `<h2>${todayView === "week" ? "Tu semana" : "Tu día"}</h2><div class="empty">Construyendo desde tu memoria…</div>`;
   try {
     const path = todayView === "week" ? "/api/week" : "/api/today";
-    const [res, st] = await Promise.all([api(path), api("/api/status").catch(() => null)]);
-    panelBody.innerHTML = syncLine(st) + todayNav() + `<div class="md">${mdToHtml(res.markdown)}</div>`;
+    const [res, st, setup] = await Promise.all([api(path), api("/api/status").catch(() => null), loadSetup()]);
+    panelBody.innerHTML = syncLine(st) + (todayView === "today" ? setupCard(setup) : "") + todayNav()
+      + `<div class="md">${mdToHtml(res.markdown)}</div>`;
   } catch (err) {
     panelBody.innerHTML = `<div class="empty">Error: ${esc(err.message)}</div>`;
   }

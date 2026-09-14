@@ -16,13 +16,23 @@ from .webapi import dispatch, dispatch_post, json_bytes
 
 class BrainHandler(BaseHTTPRequestHandler):
     store: BrainStore  # inyectado por serve()
+    token: str | None = None   # la app de escritorio fija uno; `sb serve` no
+
+    def _authorized(self, params: dict) -> bool:
+        if not self.token:
+            return True
+        return (self.headers.get("X-SB-Token") == self.token
+                or params.get("token") == self.token)
 
     def do_GET(self) -> None:  # noqa: N802 (nombre requerido por http.server)
         url = urlparse(self.path)
         params = {k: v[0] for k, v in parse_qs(url.query).items()}
         try:
+            if not self._authorized(params):
+                self._respond(401, json_bytes({"error": "sesión no autorizada"}), "application/json")
+                return
             if url.path in ("/", "/index.html"):
-                self._respond(200, render_page().encode("utf-8"),
+                self._respond(200, render_page(token=self.token).encode("utf-8"),
                               "text/html; charset=utf-8")
                 return
             status, payload = dispatch(self.store, url.path, params)
@@ -38,6 +48,9 @@ class BrainHandler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = self.rfile.read(min(length, 30_000_000)) if length else b""
         try:
+            if not self._authorized(params):
+                self._respond(401, json_bytes({"error": "sesión no autorizada"}), "application/json")
+                return
             status, payload = dispatch_post(self.store, url.path, params, body)
             self._respond(status, json_bytes(payload),
                           "application/json; charset=utf-8")
@@ -55,10 +68,16 @@ class BrainHandler(BaseHTTPRequestHandler):
         self.wfile.write(data)
 
 
-def serve(store: BrainStore, host: str = "127.0.0.1", port: int = 8765) -> None:
-    handler = type("Handler", (BrainHandler,), {"store": store})
-    server = ThreadingHTTPServer((host, port), handler)
-    print(f"Segundo Cerebro UI → http://{host}:{port}")
+def make_server(store: BrainStore, host: str = "127.0.0.1", port: int = 8765,
+                token: str | None = None) -> ThreadingHTTPServer:
+    handler = type("Handler", (BrainHandler,), {"store": store, "token": token})
+    return ThreadingHTTPServer((host, port), handler)
+
+
+def serve(store: BrainStore, host: str = "127.0.0.1", port: int = 8765,
+          token: str | None = None) -> None:
+    server = make_server(store, host, port, token)
+    print(f"Segundo Cerebro UI → http://{host}:{port}" + (f"/?token={token}" if token else ""))
     try:
         server.serve_forever()
     except KeyboardInterrupt:

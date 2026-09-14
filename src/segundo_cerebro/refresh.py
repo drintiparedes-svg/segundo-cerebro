@@ -201,9 +201,10 @@ def status(store, brain_dir: str | Path) -> dict:
     except Exception:
         pass
     from .ai import status as ai_status
+    from . import __version__
     return {"running": is_locked(brain_dir), "last": last, "minutes_ago": minutes,
             "counts": counts, "llm": cfg["llm"], "refresh": cfg["refresh"],
-            "ai": ai_status(brain_dir),
+            "ai": ai_status(brain_dir), "version": __version__,
             "next_due": (datetime.fromisoformat(last["finished"])
                          + timedelta(hours=cfg["refresh"]["every_hours"])
                          ).isoformat(timespec="minutes") if last and last.get("finished") else None}

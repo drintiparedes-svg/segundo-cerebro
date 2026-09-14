@@ -66,6 +66,8 @@ presentarme al sponsor de X?") se responden desde el grafo.
 - ✅ Producto · Fase D: PubMed / ClinicalTrials / guías RSS con procedencia,
   radar de financiamiento verificado, indicadores y lente financiera
   ([docs/18](18-fuentes-validadas-y-finanzas.md))
+- ✅ Producto · Fase E: app de escritorio con token de sesión, primeros pasos,
+  `sb doctor`, empaquetado e instaladores por release ([docs/19](19-app-de-escritorio.md))
 - Orquestador + agentes (research, strategy, project, executive, writing)
 - ✅ Human approval gate (bandeja) · ✅ borradores de correo y preparación de
   reuniones · ✅ autonomía gradual por categoría de acción

@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "segundo-cerebro"
-version = "0.1.0"
+version = "0.2.0"
 description = "Personal Cognitive Operating System: memoria digital persistente + agentes"
 readme = "README.md"
 requires-python = ">=3.11"
@@ -25,9 +25,12 @@ files = [
     "python-pptx>=0.6",
 ]
 dev = ["pytest>=8.0"]
+app = ["pywebview>=5.0"]
+build = ["pyinstaller>=6.0"]
 
 [project.scripts]
 sb = "segundo_cerebro.cli:main"
+segundo-cerebro = "segundo_cerebro.app.main:main"
 
 [tool.setuptools.packages.find]
 where = ["src"]

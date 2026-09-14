@@ -17,5 +17,6 @@ def ui_body() -> str:
     return resources.files(__package__).joinpath("index.html").read_text("utf-8")
 
 
-def render_page() -> str:
-    return SKELETON_OPEN + ui_body() + SKELETON_CLOSE
+def render_page(token: str | None = None) -> str:
+    meta = f'<meta name="sb-token" content="{token}">\n' if token else ""
+    return SKELETON_OPEN + meta + ui_body() + SKELETON_CLOSE

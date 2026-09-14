@@ -32,6 +32,7 @@ Captura → Procesamiento cognitivo → Memorias → Router → Context Engine �
 | [16 · Conectores](docs/16-conectores.md) | Connector SDK: conectar, probar, sincronizar y desconectar fuentes con purga de sus datos |
 | [17 · Carga y autonomía](docs/17-carga-y-autonomia.md) | cockpit de carga (hoy + 7 días), esfuerzo inferido y ajustable, matriz de autonomía |
 | [18 · Fuentes validadas y finanzas](docs/18-fuentes-validadas-y-finanzas.md) | PubMed, ClinicalTrials.gov, guías RSS, radar de financiamiento verificado, indicadores, lente financiera |
+| [19 · App de escritorio](docs/19-app-de-escritorio.md) | ventana nativa con token de sesión, primeros pasos, `sb doctor`, empaquetado e instaladores |
 
 ## Quickstart
 
@@ -69,6 +70,7 @@ sb google connect falp --write   # opt-in: bloques en Calendar y borradores en G
 sb literature watch "hpv self-sampling" --source pubmed   # búsqueda guardada, con PMID/DOI
 sb funding                  # radar: solo convocatorias verificables como abiertas
 sb project finance tesis --budget Plan.xlsx   # presupuesto, costo por unidad, ROI, alertas
+sb app                      # app de escritorio (ventana nativa) · sb doctor revisa que todo esté en su sitio
 sb add informe.docx         # sube un archivo suelto del notebook
 sb zotero import lib.bib    # tu biblioteca de referencias
 sb chats import export.txt  # WhatsApp/Slack a la memoria episódica

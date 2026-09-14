@@ -1,0 +1,60 @@
+name: release
+
+on:
+  push:
+    tags: ["v*"]
+  workflow_dispatch:
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[files,dev]"
+      - run: python -m pytest -q
+
+  build:
+    needs: test
+    strategy:
+      matrix:
+        include:
+          - os: windows-latest
+            artifact: segundo-cerebro-windows
+          - os: macos-latest
+            artifact: segundo-cerebro-macos
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: { python-version: "3.12" }
+      - run: pip install -e ".[app,files,google,build]"
+      - run: python packaging/build_app.py
+      - name: Empaquetar (Windows)
+        if: runner.os == 'Windows'
+        run: Compress-Archive -Path "dist/Segundo Cerebro" -DestinationPath "${{ matrix.artifact }}.zip"
+      - name: Empaquetar (macOS .dmg)
+        if: runner.os == 'macOS'
+        run: |
+          hdiutil create -volname "Segundo Cerebro" -srcfolder "dist/Segundo Cerebro.app" -ov -format UDZO "${{ matrix.artifact }}.dmg"
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ matrix.artifact }}
+          path: |
+            ${{ matrix.artifact }}.zip
+            ${{ matrix.artifact }}.dmg
+          if-no-files-found: ignore
+
+  release:
+    needs: build
+    if: startsWith(github.ref, 'refs/tags/v')
+    runs-on: ubuntu-latest
+    permissions: { contents: write }
+    steps:
+      - uses: actions/download-artifact@v4
+        with: { path: artifacts }
+      - uses: softprops/action-gh-release@v2
+        with:
+          files: artifacts/**/*
+          generate_release_notes: true

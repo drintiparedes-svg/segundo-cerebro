@@ -239,6 +239,22 @@ def projects_payload(store, params: dict) -> list:
     return out
 
 
+def doctor_payload(store, params: dict) -> dict:
+    from .doctor import run_doctor
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"checks": [], "summary": {}, "healthy": True, "demo": True}
+    return run_doctor(brain_dir, store, test_connectors=params.get("connectors", "1") != "0")
+
+
+def setup_payload(store, params: dict) -> dict:
+    from .doctor import setup_status
+    brain_dir = _brain_dir(store)
+    if brain_dir is None:
+        return {"steps": [], "done": 0, "total": 0, "complete": True, "demo": True}
+    return setup_status(brain_dir, store)
+
+
 def finance_payload(store, params: dict) -> dict:
     from .connectors.indicators import get_indicators
     from .finance import project_finance
@@ -374,6 +390,8 @@ ROUTES = {
     "/api/workload": workload_payload,
     "/api/autonomy": autonomy_payload,
     "/api/finance": finance_payload,
+    "/api/doctor": doctor_payload,
+    "/api/setup": setup_payload,
     "/api/funding": funding_payload,
     "/api/queue": queue_payload,
     "/api/week": week_payload,
@@ -541,6 +559,26 @@ def capture_mail(store, params: dict, body: bytes) -> tuple[int, object]:
     return 200, result
 
 
+def schedule_action(action: str):
+    def handler(store, params: dict, body: bytes) -> tuple[int, object]:
+        from . import scheduler
+        brain_dir = _brain_dir(store)
+        if brain_dir is None:
+            return 400, {"error": "sin memoria local (modo demo)"}
+        data = _json_body(body) or {}
+        try:
+            if action == "install":
+                db = str(Path(getattr(store, "db_path")).resolve())
+                result = scheduler.install(Path.cwd(), db, every=data.get("every", "4h"),
+                                           dry_run=bool(data.get("dry_run")))
+            else:
+                result = scheduler.remove(dry_run=bool(data.get("dry_run")))
+        except Exception as exc:
+            return 500, {"error": f"{type(exc).__name__}: {exc}"}
+        return 200, {k: v for k, v in result.items() if k != "plist"}
+    return handler
+
+
 def set_autonomy(store, params: dict, body: bytes) -> tuple[int, object]:
     from .autonomy import set_level
     data = _json_body(body)
@@ -672,6 +710,8 @@ POST_ROUTES = {
     "/api/ai/on": ai_on,
     "/api/kos/update": update_ko,
     "/api/autonomy/set": set_autonomy,
+    "/api/schedule/install": schedule_action("install"),
+    "/api/schedule/remove": schedule_action("remove"),
     "/api/queue/run": queue_action("run"),
     "/api/queue/approve": queue_action("approve"),
     "/api/queue/reject": queue_action("reject"),

@@ -134,7 +134,7 @@ def submit(brain_dir: str | Path, store, action: str, executor: str, title: str,
     item = {"id": new_id("act"), "action": action, "executor": executor, "title": title,
             "payload": payload, "rationale": rationale, "key": key, "source_doc": source_doc,
             "level": effective_level(brain_dir, action), "decision": decision,
-            "created_at": datetime.now().isoformat(timespec="seconds"),
+            "created_at": datetime.now().isoformat(timespec="microseconds"),
             "status": "pending", "result": None, "resolved_at": None}
     if decision == "suggest":
         item["status"] = "suggested"

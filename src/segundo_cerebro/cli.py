@@ -458,6 +458,40 @@ def cmd_project_finance(args) -> int:
     return 0
 
 
+def cmd_doctor(args) -> int:
+    from .doctor import run_doctor
+    import json as _json
+    result = run_doctor(_brain_dir(args), _store(args))
+    if args.json:
+        print(_json.dumps(result, ensure_ascii=False, indent=2))
+        return 0 if result["healthy"] else 1
+    icon = {"ok": "✔", "warn": "!", "fail": "✘"}
+    print(f"Segundo Cerebro {result['version']} · doctor\n")
+    for c in result["checks"]:
+        print(f" {icon[c['level']]} {c['id']:<28} {c['detail']}" + (f"\n     → {c['fix']}" if c["fix"] else ""))
+    s = result["summary"]
+    print(f"\n{s['ok']} ok · {s['warn']} avisos · {s['fail']} fallas")
+    return 0 if result["healthy"] else 1
+
+
+def cmd_update_check(args) -> int:
+    from .app.updates import check_latest
+    r = check_latest()
+    if r.get("error"):
+        print(f"No pude consultar GitHub Releases: {r['error']} (versión actual {r['current']})")
+        return 1
+    if r["update"]:
+        print(f"Hay una versión nueva: {r['latest']} (tienes {r['current']}) → {r['url']}")
+    else:
+        print(f"Estás al día ({r['current']})" + (f"; última publicada {r['latest']}" if r["latest"] else ""))
+    return 0
+
+
+def cmd_app(args) -> int:
+    from .app.main import main as app_main
+    return app_main(["--db", args.db] + (["--browser"] if args.browser else []) + (["--no-refresh"] if args.no_refresh else []))
+
+
 def cmd_autonomy(args) -> int:
     from . import autonomy
     brain_dir = _brain_dir(args)
@@ -1191,7 +1225,9 @@ def cmd_serve(args) -> int:
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="sb", description="Segundo Cerebro — Personal Cognitive OS")
+    from . import __version__
     parser.add_argument("--db", default=DEFAULT_DB, help=f"ruta de la base (default: {DEFAULT_DB})")
+    parser.add_argument("--version", action="version", version=f"sb {__version__}")
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("ingest", help="ingesta un archivo o directorio Markdown")
@@ -1296,6 +1332,18 @@ def main(argv: list[str] | None = None) -> int:
     p = sub.add_parser("indicators", help="UF, dólar, euro, IPC, UTM (mindicador.cl, caché 24 h)")
     p.add_argument("--offline", action="store_true")
     p.set_defaults(func=cmd_indicators)
+
+    p = sub.add_parser("doctor", help="¿está todo en su sitio? dependencias, cerebro, conectores, Google, tarea, IA")
+    p.add_argument("--json", action="store_true")
+    p.set_defaults(func=cmd_doctor)
+
+    p = sub.add_parser("update-check", help="consulta GitHub Releases (solo cuando tú lo pides)")
+    p.set_defaults(func=cmd_update_check)
+
+    p = sub.add_parser("app", help="abre la app de escritorio (ventana nativa con token de sesión)")
+    p.add_argument("--browser", action="store_true")
+    p.add_argument("--no-refresh", action="store_true")
+    p.set_defaults(func=cmd_app)
 
     au = sub.add_parser("autonomy", help="matriz de autonomía: qué corre solo, qué se propone, qué nunca")
     ausub = au.add_subparsers(dest="autonomy_command")
